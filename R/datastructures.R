@@ -8,17 +8,19 @@ setGeneric("units<-")
 setOldClass("lm")
 setOldClass("glm")
 
-setClass("modelOutput",
+setClass("exposureModel",
          representation(model = "lm",
-                        exposure = "character",
-                        other = "character"))
+                        exposure = "character"))
 
 setGeneric("getNames", function(x, ...) standardGeneric("getNames"))
-setMethod("getNames", "modelOutput",
+setMethod("getNames", "exposureModel",
           function(x, ...) {
                   frm <- formula(x@model)
+                  others <- attr(terms(x@model), "term.labels")
+                  i <- grep(x@exposure, others)
                   list(response = as.character(frm)[2],
-                       other = attr(terms(x@model), "term.labels"))
+                       exposure = others[i],
+                       other = others[-i])
           })
 
 char2comma <- function(x) {
