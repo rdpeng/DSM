@@ -1,5 +1,5 @@
 ################################################################################
-## Data structures for environmental epi example
+## Data structures for environmental epi example (air pollution time series)
 ################################################################################
 
 setOldClass("lm")
@@ -108,8 +108,8 @@ modelEffect.method <- function(object, incr = 1, pvalue = FALSE, ...) {
         else {
                 msg <- sprintf("a %s unit %s in %s was associated with a %s unit %s in %s",
                                abs(incr), ifelse(incr > 0, "increase", "decrease"),
-                               sQuote(nms$exposure), modelCoef(objecct, incr),
-                               ifelse(bb > 0, "increase", "decrease"),
+                               sQuote(nms$exposure), modelCoef(object, incr),
+                               ifelse(si > 0, "increase", "decrease"),
                                sQuote(nms$response))
         }
         if(pvalue) {
@@ -222,3 +222,7 @@ setMethod("plot", "adjustTimeDF", function(x, y, xlab = "Degrees of freedom for 
         segments(xpts, ci[1, ], xpts, ci[2, ])
         abline(h = coef(x@orig@model)[nms$exposure], lty = 2)
 })
+
+################################################################################
+## EDA
+
