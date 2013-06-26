@@ -2,9 +2,6 @@
 ## Data structures for environmental epi example
 ################################################################################
 
-setGeneric("units")
-setGeneric("units<-")
-
 setOldClass("lm")
 setOldClass("glm")
 
