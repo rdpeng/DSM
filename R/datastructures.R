@@ -46,17 +46,18 @@ setMethod("modelType", "glm",
                   fam <- family(object)
                   if(fam$family == "gaussian")
                           "linear regression"
-                  else if(fam$family == "binomial") {
+                  else if(fam$family == "binomial") 
                           paste(fam$link, "regression")
-                  }
+                  else if(fam$family == "poisson")
+                          "Poisson regression"
                   else 
                           paste(fam$family, "regression")                  
           })
 
-setGeneric("describeModel", function(object, ...)
-           standardGeneric("describeModel"))
+setGeneric("describe", function(object, ...)
+           standardGeneric("describe"))
 
-setMethod("describeModel", "exposureModel", function(object, ...) {
+setMethod("describe", "exposureModel", function(object, ...) {
         nms <- getNames(object)
         sprintf("a %s model where %s was regressed on exposure %s along with %s",
                 modelType(object@model), sQuote(nms$response),
@@ -65,45 +66,52 @@ setMethod("describeModel", "exposureModel", function(object, ...) {
 
 setGeneric("modelEffect", function(object, ...) standardGeneric("modelEffect"))
 
+setGeneric("modelCoef", function(object, ...) standardGeneric("modelCoef"))
 
-modelEffect.method <- function(object, incr = 1, pvalue = FALSE, expcoef = TRUE, ...) {
+setMethod("modelCoef", "exposureModel", function(object, incr = 1, ...) {
         fam <- family(object@model)$family
         nms <- getNames(object)
-        ci <- suppressMessages(confint(object@model, nms$exposure))
+        ci <- suppressMessages(confint.default(object@model, nms$exposure))
         ci <- ci * incr
         cf <- coef(object@model)
         i <- grep(object@exposure, names(cf))
         b <- cf[i]
         bb <- b * incr
 
-        if(fam == "binomial") {
+        if(fam == "binomial" || fam == "poisson") {
                 bb <- exp(bb)
                 ci <- exp(ci)
-                ci.txt <- prettyNum(ci)
-                msg <- sprintf("a %s unit %s in %s was associated with a %s (95%% CI: %s, %s) %s odds of %s",
+        }
+        ci.txt <- prettyNum(ci)
+        sprintf("%s (95%% CI: %s, %s)", prettyNum(abs(bb)),
+                ci.txt[1], ci.txt[2])
+})
+
+modelEffect.method <- function(object, incr = 1, pvalue = FALSE, ...) {
+        fam <- family(object@model)$family
+        nms <- getNames(object)
+        cf <- coef(object@model)
+        i <- grep(object@exposure, names(cf))
+        si <- sign(cf[i])
+
+        if(fam == "binomial") {
+                msg <- sprintf("a %s unit %s in %s was associated with a %s %s odds of %s",
                                abs(incr), ifelse(incr > 0, "increase", "decrease"),
-                               sQuote(nms$exposure), prettyNum(abs(bb)),
-                               ci.txt[1], ci.txt[2],
-                               ifelse(bb > 0, "increased", "decreased"),
+                               sQuote(nms$exposure), modelCoef(object, incr),
+                               ifelse(si > 0, "increased", "decreased"),
                                sQuote(nms$response))
         }
         else if(fam == "poisson") {
-                bb <- exp(bb)
-                ci <- exp(ci)
-                ci.txt <- prettyNum(ci)
-                msg <- sprintf("a %s unit %s in %s was associated with a %s (95%% CI: %s, %s) %s rate of %s",
+                msg <- sprintf("a %s unit %s in %s was associated with a %s %s rate of %s",
                                abs(incr), ifelse(incr > 0, "increase", "decrease"),
-                               sQuote(nms$exposure), prettyNum(abs(bb)),
-                               ci.txt[1], ci.txt[2],
-                               ifelse(bb > 0, "increased", "decreased"),
+                               sQuote(nms$exposure), modelCoef(object, incr),
+                               ifelse(si > 0, "increased", "decreased"),
                                sQuote(nms$response))
         }
         else {
-                ci.txt <- prettyNum(ci)
-                msg <- sprintf("a %s unit %s in %s was associated with a %s (95%% CI: %s, %s) unit %s in %s",
+                msg <- sprintf("a %s unit %s in %s was associated with a %s unit %s in %s",
                                abs(incr), ifelse(incr > 0, "increase", "decrease"),
-                               sQuote(nms$exposure), prettyNum(abs(bb)),
-                               ci.txt[1], ci.txt[2],
+                               sQuote(nms$exposure), modelCoef(objecct, incr),
                                ifelse(bb > 0, "increase", "decrease"),
                                sQuote(nms$response))
         }
@@ -117,13 +125,10 @@ modelEffect.method <- function(object, incr = 1, pvalue = FALSE, expcoef = TRUE,
 
 setMethod("modelEffect", "exposureModel", modelEffect.method)
 
-startcaps <- function(x) {
-}
-
 setMethod("show", "exposureModel",
           function(object) {
-                  out <- describeModel(object)
-                  cat(out, ".\n", sep = "")
+                  out <- paste0("* ", describe(object))
+                  writeLines(strwrap(out, exdent = 2))
                   invisible(object)
           })
 
@@ -149,28 +154,74 @@ newAPTS <- function(model, exposure, timevar = NULL) {
 setGeneric("sensitivityAnalysis", function(object, ...)
            standardGeneric("sensitivityAnalysis"))
 
-setMethod("sensitivityAnalysis", "airpollutionTS", function(object, ...) {
-        
-})
+setClass("adjustTimeDF",
+         representation(models = "list",
+                        dfseq = "integer",
+                        timeVec = "character",
+                        orig = "airpollutionTS"))
 
-
-
-adjustTimeDF <- function(object, dfseq, timeVar = "time", smoothType = "ns") {
-        confounderFormula <- as.formula(object$call$confounders)
-
-        origTimeVar <- grep(timeVar, attr(terms(confounderFormula), "term.labels"),
-                            value = TRUE)
-        stopifnot(length(origTimeVar) == 1)
-        
-        timeVec <- paste("ns(", timeVar, ", ", dfseq, ")", sep = "")
+adjustTimeDF <- function(object, dfseq, timevar = "date", smoothType = "ns") {
+        dfseq <- as.integer(dfseq)
+        nms <- getNames(object)
+        pos <- grep(timevar, nms$other)
+        origTimeVar <- nms$other[pos]
+        timeVec <- paste("ns(", timevar, ", ", dfseq, ")", sep = "")
         results <- vector("list", length = length(dfseq))
 
         for(i in seq(along = dfseq)) {
-                newTimeVar <- timeVec[i]
-                newFormula <- as.formula(paste("~ . -", origTimeVar, "+", newTimeVar))
-                results[[i]] <- update(object, confounders = newFormula)
+                newFormula <- reformulate(c(nms$exposure, nms$other[-pos],
+                                            timeVec[i]),
+                                          response = nms$response)
+                out <- update(object@model, formula = newFormula)
+                expm <- new("exposureModel", model = out,
+                            exposure = object@exposure)
+                results[[i]] <- new("airpollutionTS", timevar = timevar, expm)
         }
-        if(length(results) == 1)
-                results <- results[[1]]
-        structure(results, class = "adjustTimeDF", dfseq = dfseq)
+        new("adjustTimeDF", models = results, dfseq = dfseq,
+            timeVec = timeVec, orig = object)
 }
+
+setMethod("sensitivityAnalysis", "airpollutionTS", adjustTimeDF)
+
+
+setMethod("describe", "adjustTimeDF", function(object, ...) {
+        nms <- getNames(object@orig)
+        b <- sapply(object@models, function(x) {
+                coef(x@model)[nms$exposure]
+        })
+        imin <- which.min(b)
+        imax <- which.max(b)
+        msg1 <- sprintf("a sensitivity analysis for %s",
+                        describe(object@orig))
+        msg2 <- modelEffect(object@orig)
+        msg3 <- sprintf("the coefficient for %s varied from %s to %s",
+                        sQuote(nms$exposure),
+                        modelCoef(object@models[[imin]]),
+                        modelCoef(object@models[[imax]]))
+        list(model.orig = msg1, coef.orig = msg2, sens.range = msg3)
+})
+
+setMethod("show", "adjustTimeDF",
+          function(object) {
+                  out <- lapply(describe(object), function(x) {
+                          strwrap(paste0("* ", x), exdent = 2)
+                  })
+                  with(out, cat(model.orig, coef.orig, sens.range, sep = "\n"))
+                  invisible(object)
+          })
+
+setGeneric("plot")
+setGeneric("summary")
+
+setMethod("plot", "adjustTimeDF", function(x, y, xlab = "Degrees of freedom for time", ylab = "Coefficient", ...) {
+        nms <- getNames(x@orig)
+        b <- sapply(x@models, function(x) coef(x@model)[nms$exposure])
+        ci <- sapply(x@models, function(x) {
+                confint.default(x@model, nms$exposure)
+        })
+        xpts <- x@dfseq
+        ypts <- b
+        plot(xpts, ypts, ylim = range(ci), xlab = xlab, ylab = ylab, ...)
+        segments(xpts, ci[1, ], xpts, ci[2, ])
+        abline(h = coef(x@orig@model)[nms$exposure], lty = 2)
+})
