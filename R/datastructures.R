@@ -2,14 +2,62 @@
 ## Data structures for environmental epi example (air pollution time series)
 ################################################################################
 
+################################################################################
+## Data Classes
+
 setOldClass("lm")
 setOldClass("glm")
-
+setOldClass("data.frame")
 setClass("exposureModel",
          representation(model = "lm",
                         exposure = "character"))
+setClass("APTSModel",
+         representation(timevar = "character",
+                        summary = "APTSSummary",
+                        "exposureModel"))
+setClass("sensitivityResults",
+         representation(models = "list",
+                        orig = "exposureModel"))
+setClass("adjustTimeDF",
+         representation(dfseq = "integer",
+                        timeVec = "character",
+                        "sensitivityResults"))
+setClass("APTSData",
+         representation(response = "character",
+                        exposure = "character",
+                        timevar = "character",
+                        "data.frame"))
+setClass("APTSSummary",
+         representation(miss = "numeric", skew = "list", disp = "numeric",
+                        highlev = "character", outlier = "character",
+                        data = "APTSData"))
 
+
+################################################################################
+## Generic Functions
+
+setGeneric("modelEffect", function(object, ...) standardGeneric("modelEffect"))
+setGeneric("modelCoef", function(object, ...) standardGeneric("modelCoef"))
 setGeneric("getNames", function(x, ...) standardGeneric("getNames"))
+setGeneric("modelType", function(object, ...) standardGeneric("modelType"))
+setGeneric("describe", function(object, ...) standardGeneric("describe"))
+setGeneric("sensitivityAnalysis", function(object, ...)
+           standardGeneric("sensitivityAnalysis"))
+setGeneric("plot")
+setGeneric("summary")
+setGeneric("checkData", function(object, ...) standardGeneric("checkData"))
+setGeneric("influential", function(object, ...) standardGeneric("influential"))
+setGeneric("selectTimeDF", function(object, ...) standardGeneric("selectTimeDF"))
+setGeneric("influenceAnalysis", function(object, ...) standardGeneric("influenceAnalysis"))
+
+
+################################################################################
+## Methods
+################################################################################
+
+################################################################################
+## Utilities
+
 setMethod("getNames", "exposureModel",
           function(x, ...) {
                   frm <- formula(x@model)
@@ -31,7 +79,133 @@ char2comma <- function(x) {
                        sQuote(x[n]))
 }
 
-setGeneric("modelType", function(object, ...) standardGeneric("modelType"))
+## For now read an RDS file
+readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
+                         timevar = NULL) {
+        ## d0 <- read.csv(file, ...)
+        d0 <- readRDS(file, ...)
+        nms <- names(d0)
+        if(is.null(response))
+                response <- nms[1]
+        if(is.null(exposure))
+                exposure <- nms[2]
+        if(is.null(timevar)) {
+                i <- grep(c("date|time"), tolower(nms), perl = TRUE)
+                if(length(i) > 0) {
+                        timevar <- nms[i]
+                        message(sprintf("using '%s' for 'timevar'", timevar))
+                }
+                else
+                        stop("need to specify 'timevar'")
+        }
+        stopifnot(response %in% nms)
+        stopifnot(exposure %in% nms)
+        stopifnot(timevar %in% nms)
+        new("APTSData", d0, response = response, exposure = exposure,
+            timevar = timevar, d0)
+}
+
+################################################################################
+## EDA
+
+library(moments)
+
+nyears <- function(datevar) {
+        diff(range(as.POSIXlt(datevar)$year)) + 1
+}
+
+## Check for missing data in exposure, missing overall, skewness in
+## predictors, overdispersion in outcome, outliers
+setMethod("checkData", "APTSData", function(object, ...) {
+        nms <- names(object)
+        ## Missing data
+        miss.exp <- mean(is.na(object[, object@exposure]))
+        miss.response <- mean(is.na(object[, object@response]))
+        comp <- mean(complete.cases(object))
+        miss <- c(response = miss.response, exposure = miss.exp,
+                  complete = comp)
+        ## Right skewness in predictors
+        use <- setdiff(nms, object@response)
+        skewvar <- lapply(use, function(vname) {
+                try(suppressWarnings(agostino.test(object[, vname],
+                                                   alt = "less")),
+                    silent = TRUE)
+        })
+        u <- !sapply(skewvar, inherits, what = "try-error")
+        skewvar <- skewvar[u]
+        names(skewvar) <- use[u]
+        ## Overdispersion
+        disp <- var(object[, object@response]) / mean(object[, object@response])
+        ## High leverage predictors (continuous)
+        use <- setdiff(nms, object@response)
+        tempform <- reformulate(use)
+        mm <- model.matrix(tempform, as(object, "data.frame"))
+        lev <- diag(mm %*% tcrossprod(solve(crossprod(mm)), mm))
+        highlev <- names(which(lev >= (mean(lev) * 4)))
+        ## Response outliers
+        dummyform <- reformulate(sprintf("ns(%s, %d)", object@timevar,
+                                         nyears(object[, object@timevar]) * 4L),
+                                 object@response)
+        dummy <- glm(dummyform, data = as(object, "data.frame"),
+                     family = poisson, na.action = na.exclude)
+        res <- rstandard(dummy)
+        out <- names(which(res > 6))
+
+        new("APTSSummary", miss = miss, skew = skewvar, disp = disp,
+            highlev = highlev, outlier = out, data = object)
+})
+
+## Return obs. IDs (row #s) of influential observations
+setMethod("influential", "APTSSummary", function(object, ...) {
+        unique(c(object@highlev, object@outlier))
+})
+
+
+setMethod("describe", "APTSSummary", function(object, ...) {
+        miss.msg <- sprintf("missing: %.2f%% of response, %.2f%% of exposure", 100*object@miss["response"], 100*object@miss["exposure"])
+        cc.msg <- sprintf("complete: %.2f%% of observations were complete cases", 100*object@miss["complete"])
+        p <- p.adjust(sapply(object@skew, "[[", "p.value"), "BH")
+        p <- p[!is.na(p)]
+        sk <- p < 0.05
+        skew.msg <- sprintf("right-skew: %s", ifelse(all(!sk), "NA", paste(names(which(sk)), collapse = ", ")))
+        lev.msg <- sprintf("high leverage (row #): %s", paste(object@highlev, collapse = ", "))
+        out.msg <- sprintf("outlier (row #): %s", paste(object@outlier, collapse = ", "))
+        c(miss = miss.msg, complete = cc.msg, skew = skew.msg,
+          highlev = lev.msg, outlier = out.msg)
+})
+
+setMethod("show", "APTSSummary", function(object) {
+        d <- describe(object)
+        x <- strwrap(paste0("* ", d), exdent = 2)
+        writeLines(x)
+})
+
+################################################################################
+## Model Building
+
+setMethod("selectTimeDF", "APTSModel", selectTimeDF)
+
+selectTimeDF <- function(object, dfseq = 2:16, ...) {
+        nms <- getNames(object)
+        mod <- object@model
+        pos <- grep(object@timevar, nms$other)
+        dat <- as(object@summary@data, "data.frame")
+        nyr <- nyears(dat[, object@timevar])
+        dfseq.total <- dfseq * nyr
+        timeVec <- paste0("ns(", object@timevar, ", ", dfseq.total, ")")
+        results <- lapply(timeVec, function(tv) {
+                newFormula <- reformulate(c(tv, nms$other[-pos]),
+                                          response = object@exposure)
+                try(update(mod, formula = newFormula, family = gaussian),
+                    silent = TRUE)
+        })
+        aic <- sapply(results, function(x) try(AIC(x), silent = TRUE))
+        names(aic) <- dfseq
+        structure(dfseq[which.min(aic)], aic = aic)
+}
+
+################################################################################
+## Model Reporting
 
 setMethod("modelType", "lm",
           function(object, ...) {
@@ -51,8 +225,6 @@ setMethod("modelType", "glm",
                           paste(fam$family, "regression")                  
           })
 
-setGeneric("describe", function(object, ...)
-           standardGeneric("describe"))
 
 setMethod("describe", "exposureModel", function(object, ...) {
         nms <- getNames(object)
@@ -60,10 +232,6 @@ setMethod("describe", "exposureModel", function(object, ...) {
                 modelType(object@model), sQuote(nms$response),
                 sQuote(nms$exposure), char2comma(nms$other))
 })
-
-setGeneric("modelEffect", function(object, ...) standardGeneric("modelEffect"))
-
-setGeneric("modelCoef", function(object, ...) standardGeneric("modelCoef"))
 
 setMethod("modelCoef", "exposureModel", function(object, incr = 1, ...) {
         fam <- family(object@model)$family
@@ -130,36 +298,13 @@ setMethod("show", "exposureModel",
           })
 
 
-setClass("airpollutionTS",
-         representation(timevar = "character",
-                        "exposureModel"))
-newAPTS <- function(model, exposure, timevar = NULL) {
-        expm <- new("exposureModel", model = model, exposure = exposure)
-        if(is.null(timevar)) {
-                nms <- getNames(expm)
-                i <- grep(c("date|time"), tolower(nms$other), perl = TRUE)
-                if(length(i) > 0) {
-                        timevar <- nms$other[i]
-                        message(sprintf("using '%s' for 'timevar'", timevar))
-                }
-                else
-                        stop("need to specify 'timevar'")
-        }
-        new("airpollutionTS", timevar = timevar, expm)
-}
+################################################################################
+## Sensitivity Analysis
 
-setGeneric("sensitivityAnalysis", function(object, ...)
-           standardGeneric("sensitivityAnalysis"))
-
-setClass("adjustTimeDF",
-         representation(models = "list",
-                        dfseq = "integer",
-                        timeVec = "character",
-                        orig = "airpollutionTS"))
-
-adjustTimeDF <- function(object, dfseq, timevar = "date", smoothType = "ns") {
+adjustTimeDF <- function(object, dfseq) {
         dfseq <- as.integer(dfseq)
         nms <- getNames(object)
+        timevar <- object@timevar
         pos <- grep(timevar, nms$other)
         origTimeVar <- nms$other[pos]
         timeVec <- paste("ns(", timevar, ", ", dfseq, ")", sep = "")
@@ -172,16 +317,40 @@ adjustTimeDF <- function(object, dfseq, timevar = "date", smoothType = "ns") {
                 out <- update(object@model, formula = newFormula)
                 expm <- new("exposureModel", model = out,
                             exposure = object@exposure)
-                results[[i]] <- new("airpollutionTS", timevar = timevar, expm)
+                results[[i]] <- expm
         }
+        names(results) <- as.character(dfseq)
         new("adjustTimeDF", models = results, dfseq = dfseq,
             timeVec = timeVec, orig = object)
 }
 
-setMethod("sensitivityAnalysis", "airpollutionTS", adjustTimeDF)
+setMethod("influenceAnalysis", "APTSModel", function(object, ...) {
+        ## Influential observations
+        fit <- object@model
+        idx <- influential(object@summary)
+        dat <- as(object@summary@data, "data.frame")
+        expo <- getNames(object)$exposure
+        modellist <- lapply(idx, function(id) {
+                i <- match(id, row.names(dat))
+                newdat <- dat[-i, ]
+                m <- try(update(fit, data = newdat), silent = TRUE)
+                new("exposureModel", model = m, exposure = object@exposure)
+        })
+        rm.all <- try({
+                i <- match(idx, row.names(dat))
+                new("exposureModel", model = update(fit, data = dat[-i, ]),
+                    exposure = object@exposure)
+        }, silent = TRUE)
+        results <- append(modellist, list(rm.all))
+        names(results) <- c(idx, paste(idx, collapse = "."))
+        new("sensitivityResults", models = results, orig = object)
+})
 
+setMethod("sensitivityAnalysis", "APTSModel", function(object, ...) {
+        adj <- adjustTimeDF(object, ...)
+})
 
-setMethod("describe", "adjustTimeDF", function(object, ...) {
+setMethod("describe", "sensitivityResults", function(object, ...) {
         nms <- getNames(object@orig)
         b <- sapply(object@models, function(x) {
                 coef(x@model)[nms$exposure]
@@ -198,7 +367,7 @@ setMethod("describe", "adjustTimeDF", function(object, ...) {
         list(model.orig = msg1, coef.orig = msg2, sens.range = msg3)
 })
 
-setMethod("show", "adjustTimeDF",
+setMethod("show", "sensitivityResults",
           function(object) {
                   out <- lapply(describe(object), function(x) {
                           strwrap(paste0("* ", x), exdent = 2)
@@ -207,10 +376,26 @@ setMethod("show", "adjustTimeDF",
                   invisible(object)
           })
 
-setGeneric("plot")
-setGeneric("summary")
+setMethod("plot", "sensitivityResults", function(x, y, xlab = "Models", ylab = "Coefficient", pch = 19, legend = TRUE, ...) {
+        nms <- getNames(x@orig)
+        b <- sapply(x@models, function(x) coef(x@model)[nms$exposure])
+        ci <- sapply(x@models, function(x) {
+                confint.default(x@model, nms$exposure)
+        })
+        xpts <- seq(along = x@models)
+        ypts <- b
+        plot(xpts, ypts, ylim = range(ci), xlab = xlab, ylab = ylab,
+             pch = pch, xaxt = "n", ...)
+        segments(xpts, ci[1, ], xpts, ci[2, ])
+        abline(h = coef(x@orig@model)[nms$exposure], lty = 2)
+        if(legend)
+                legend("topright", legend = "Original Estimate", lty = 2,
+                       bty = "n")
+        axis(1, xpts, names(x@models))
+        invisible()
+})
 
-setMethod("plot", "adjustTimeDF", function(x, y, xlab = "Degrees of freedom for time", ylab = "Coefficient", ...) {
+setMethod("plot", "adjustTimeDF", function(x, y, xlab = "Degrees of freedom for time", ylab = "Coefficient", pch = 19, legend = TRUE, ...) {
         nms <- getNames(x@orig)
         b <- sapply(x@models, function(x) coef(x@model)[nms$exposure])
         ci <- sapply(x@models, function(x) {
@@ -218,11 +403,13 @@ setMethod("plot", "adjustTimeDF", function(x, y, xlab = "Degrees of freedom for 
         })
         xpts <- x@dfseq
         ypts <- b
-        plot(xpts, ypts, ylim = range(ci), xlab = xlab, ylab = ylab, ...)
+        plot(xpts, ypts, ylim = range(ci), xlab = xlab, ylab = ylab,
+             pch = pch, ...)
         segments(xpts, ci[1, ], xpts, ci[2, ])
         abline(h = coef(x@orig@model)[nms$exposure], lty = 2)
+        if(legend)
+                legend("topright", legend = "Original Estimate", lty = 2,
+                       bty = "n")
+        invisible()
 })
-
-################################################################################
-## EDA
 
