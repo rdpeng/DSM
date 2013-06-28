@@ -5,6 +5,7 @@ m <- new("exposureModel", model = f, exposure = "Wind")
 
 library(tsModel)
 library(splines)
+source("R/datastructures.R")
 d0 <- readRDS("inst/ny.rds")
 g <- glm(death ~ dow + ns(date, 19 * 6) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 1), data = d0, family = poisson)
 
