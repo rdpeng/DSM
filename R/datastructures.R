@@ -201,7 +201,8 @@ selectTimeDF <- function(object, dfseq = 2:16, ...) {
         })
         aic <- sapply(results, function(x) try(AIC(x), silent = TRUE))
         names(aic) <- dfseq
-        structure(dfseq[which.min(aic)], aic = aic)
+        dfmin <- dfseq[which.min(aic)]
+        ## Return updated APTSModel
 }
 
 ################################################################################
