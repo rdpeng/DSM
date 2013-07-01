@@ -1,0 +1,217 @@
+<h1 id="summary-of-data-analysis">Summary of Data Analysis</h1>
+<h2 id="initialization">Initialization</h2>
+<p>Loading required packages.</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(tsModel)</code></pre>
+<pre><code>## Time Series Modeling for Air Pollution and Health (0.6)</code></pre>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(splines)
+<span class="kw">library</span>(methods)
+<span class="kw">source</span>(<span class="st">&quot;../R/datastructures.R&quot;</span>)</code></pre>
+<h2 id="exploratory-data-analysis">Exploratory Data Analysis</h2>
+<p>Read in the raw data.</p>
+<pre class="sourceCode r"><code class="sourceCode r">d0 &lt;- <span class="kw">readAPTSData</span>(<span class="st">&quot;ny.rds&quot;</span>)</code></pre>
+<pre><code>## using &#39;date&#39; for &#39;timevar&#39;</code></pre>
+<p>Run the exploratory analysis.</p>
+<pre class="sourceCode r"><code class="sourceCode r">ch &lt;- <span class="kw">checkData</span>(d0)
+<span class="kw">print</span>(ch)</code></pre>
+<pre><code>## * missing: 0.00% of response, 83.80% of exposure
+## * complete: 16.18% of observations were complete cases
+## * right-skew: pm10tmean
+## * high leverage (row #): 3510, 5667
+## * outlier (row #): 593, 2383, 2384, 2385, 4571</code></pre>
+<h2 id="model-building">Model Building</h2>
+<p>Fitting the base model.</p>
+<pre class="sourceCode r"><code class="sourceCode r">base &lt;- <span class="kw">glm</span>(death ~ dow + <span class="kw">ns</span>(date, <span class="dv">19</span> * <span class="dv">6</span>) + <span class="kw">ns</span>(tmpd, <span class="dv">6</span>) + <span class="kw">ns</span>(rmtmpd, <span class="dv">6</span>) + <span class="kw">ns</span>(dptp, 
+    <span class="dv">3</span>) + <span class="kw">ns</span>(rmdptp, <span class="dv">3</span>) + <span class="kw">Lag</span>(pm10tmean, <span class="dv">1</span>), <span class="dt">data =</span> <span class="kw">as</span>(d0, <span class="st">&quot;data.frame&quot;</span>), <span class="dt">family =</span> poisson)</code></pre>
+<p>Selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding.</p>
+<pre class="sourceCode r"><code class="sourceCode r">ap &lt;- <span class="kw">new</span>(<span class="st">&quot;APTSModel&quot;</span>, <span class="dt">timevar =</span> <span class="st">&quot;date&quot;</span>, <span class="dt">model =</span> base, <span class="dt">exposure =</span> <span class="st">&quot;pm10tmean&quot;</span>, 
+    <span class="dt">summary =</span> ch)
+dfmin &lt;- <span class="kw">selectTimeDF</span>(ap)</code></pre>
+<p>Optimal number of degrees of freedom <em>per year</em> for the smooth function of time.</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">show</span>(dfmin)</code></pre>
+<pre><code>## [1] 5</code></pre>
+<p>Check AIC values for selecting the degrees of freedom per year.</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">plot</span>(dfmin)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-7.png" alt="plot of chunk unnamed-chunk-7" /><p class="caption">plot of chunk unnamed-chunk-7</p>
+</div>
+<h2 id="model-fitting">Model Fitting</h2>
+<p>Fitting the final model.</p>
+<pre class="sourceCode r"><code class="sourceCode r">df &lt;- <span class="kw">as</span>(dfmin, <span class="st">&quot;numeric&quot;</span>)
+final &lt;- <span class="kw">glm</span>(death ~ dow + <span class="kw">ns</span>(date, <span class="dv">19</span> * df) + <span class="kw">ns</span>(tmpd, <span class="dv">6</span>) + <span class="kw">ns</span>(rmtmpd, <span class="dv">6</span>) + 
+    <span class="kw">ns</span>(dptp, <span class="dv">3</span>) + <span class="kw">ns</span>(rmdptp, <span class="dv">3</span>) + <span class="kw">Lag</span>(pm10tmean, <span class="dv">1</span>), <span class="dt">data =</span> <span class="kw">as</span>(d0, <span class="st">&quot;data.frame&quot;</span>), 
+    <span class="dt">family =</span> poisson)
+ap &lt;- <span class="kw">new</span>(<span class="st">&quot;APTSModel&quot;</span>, <span class="dt">timevar =</span> <span class="st">&quot;date&quot;</span>, <span class="dt">model =</span> final, <span class="dt">exposure =</span> <span class="st">&quot;pm10tmean&quot;</span>, 
+    <span class="dt">summary =</span> ch)</code></pre>
+<h2 id="results">Results</h2>
+<p>Final results for a 10 unit change in exposure.</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">writeLines</span>(<span class="kw">strwrap</span>(<span class="kw">modelEffect</span>(ap, <span class="dt">incr =</span> <span class="dv">10</span>, <span class="dt">pvalue =</span> <span class="ot">TRUE</span>)))</code></pre>
+<pre><code>## a 10 unit increase in &#39;Lag(pm10tmean, 1)&#39; was associated with a
+## 1.007 (95% CI: 1.002, 1.012) increased rate of &#39;death&#39; (p =
+## 0.003329)</code></pre>
+<h2 id="sensitivity-analysis">Sensitivity Analysis</h2>
+<p>Run sensitivity analysis with respect to the degrees of freedom for the smooth function of time.</p>
+<pre class="sourceCode r"><code class="sourceCode r">sens &lt;- <span class="kw">sensitivityAnalysis</span>(ap, <span class="dv">4</span>:<span class="dv">20</span>)
+<span class="kw">show</span>(sens)</code></pre>
+<pre><code>## * a sensitivity analysis for a Poisson regression model where
+##   &#39;death&#39; was regressed on exposure &#39;Lag(pm10tmean, 1)&#39; along with
+##   &#39;dow&#39;, &#39;ns(date, 19 * df)&#39;, &#39;ns(tmpd, 6)&#39;, &#39;ns(rmtmpd, 6)&#39;,
+##   &#39;ns(dptp, 3)&#39;, and &#39;ns(rmdptp, 3)&#39;
+## * a 1 unit increase in &#39;Lag(pm10tmean, 1)&#39; was associated with a
+##   1.001 (95% CI: 1, 1.001) increased rate of &#39;death&#39;
+## * the coefficient for &#39;Lag(pm10tmean, 1)&#39; varied from 1 (95% CI:
+##   0.9999, 1.001) to 1.001 (95% CI: 1, 1.001)</code></pre>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">plot</span>(sens)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-10.png" alt="plot of chunk unnamed-chunk-10" /><p class="caption">plot of chunk unnamed-chunk-10</p>
+</div>
+<p>Check sensitivity of results to outliers or influential data points.</p>
+<pre class="sourceCode r"><code class="sourceCode r">infl &lt;- <span class="kw">influenceAnalysis</span>(ap)
+<span class="kw">plot</span>(infl)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-11.png" alt="plot of chunk unnamed-chunk-11" /><p class="caption">plot of chunk unnamed-chunk-11</p>
+</div>
+<h2 id="appendix">Appendix</h2>
+<p>Summary of final fitted model.</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">summary</span>(final)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = death ~ dow + ns(date, 19 * df) + ns(tmpd, 6) + 
+##     ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 
+##     1), family = poisson, data = as(d0, &quot;data.frame&quot;))
+## 
+## Deviance Residuals: 
+##    Min      1Q  Median      3Q     Max  
+## -3.461  -0.683  -0.039   0.669   4.416  
+## 
+## Coefficients: (2 not defined because of singularities)
+##                      Estimate Std. Error z value Pr(&gt;|z|)
+## (Intercept)          5.503965   0.059088   93.15  &lt; 2e-16
+## dowMonday            0.015388   0.008357    1.84  0.06556
+## dowSaturday         -0.010907   0.008315   -1.31  0.18962
+## dowSunday           -0.015101   0.008305   -1.82  0.06902
+## dowThursday         -0.008487   0.008264   -1.03  0.30440
+## dowTuesday           0.004280   0.008312    0.51  0.60665
+## dowWednesday        -0.009176   0.008224   -1.12  0.26457
+## ns(date, 19 * df)1  -0.066276   0.053632   -1.24  0.21655
+## ns(date, 19 * df)2  -0.270448   0.071948   -3.76  0.00017
+## ns(date, 19 * df)3   0.090100   0.060524    1.49  0.13657
+## ns(date, 19 * df)4  -0.154098   0.060425   -2.55  0.01077
+## ns(date, 19 * df)5   0.214739   0.058726    3.66  0.00026
+## ns(date, 19 * df)6  -0.298046   0.063531   -4.69  2.7e-06
+## ns(date, 19 * df)7  -0.093790   0.067956   -1.38  0.16754
+## ns(date, 19 * df)8  -0.144898   0.063229   -2.29  0.02193
+## ns(date, 19 * df)9   0.081213   0.059486    1.37  0.17218
+## ns(date, 19 * df)10 -0.062613   0.059720   -1.05  0.29443
+## ns(date, 19 * df)11 -0.167607   0.063785   -2.63  0.00860
+## ns(date, 19 * df)12 -0.168059   0.067445   -2.49  0.01271
+## ns(date, 19 * df)13 -0.171616   0.062916   -2.73  0.00638
+## ns(date, 19 * df)14  0.160479   0.058870    2.73  0.00641
+## ns(date, 19 * df)15 -0.179847   0.060710   -2.96  0.00305
+## ns(date, 19 * df)16 -0.109682   0.063254   -1.73  0.08292
+## ns(date, 19 * df)17 -0.249679   0.069367   -3.60  0.00032
+## ns(date, 19 * df)18 -0.174785   0.062511   -2.80  0.00517
+## ns(date, 19 * df)19  0.052691   0.059834    0.88  0.37852
+## ns(date, 19 * df)20 -0.193851   0.061207   -3.17  0.00154
+## ns(date, 19 * df)21 -0.108019   0.064443   -1.68  0.09370
+## ns(date, 19 * df)22 -0.365146   0.068978   -5.29  1.2e-07
+## ns(date, 19 * df)23 -0.104491   0.063546   -1.64  0.10011
+## ns(date, 19 * df)24  0.025115   0.059381    0.42  0.67234
+## ns(date, 19 * df)25 -0.107982   0.060522   -1.78  0.07440
+## ns(date, 19 * df)26 -0.239815   0.064134   -3.74  0.00018
+## ns(date, 19 * df)27 -0.168838   0.068636   -2.46  0.01390
+## ns(date, 19 * df)28 -0.236672   0.062807   -3.77  0.00016
+## ns(date, 19 * df)29  0.038618   0.059470    0.65  0.51610
+## ns(date, 19 * df)30  0.100602   0.058960    1.71  0.08796
+## ns(date, 19 * df)31 -0.238430   0.065104   -3.66  0.00025
+## ns(date, 19 * df)32 -0.274936   0.070327   -3.91  9.3e-05
+## ns(date, 19 * df)33 -0.103588   0.065289   -1.59  0.11260
+## ns(date, 19 * df)34 -0.057028   0.061250   -0.93  0.35182
+## ns(date, 19 * df)35 -0.170622   0.060982   -2.80  0.00514
+## ns(date, 19 * df)36 -0.188537   0.065899   -2.86  0.00422
+## ns(date, 19 * df)37 -0.233396   0.067838   -3.44  0.00058
+## ns(date, 19 * df)38 -0.242459   0.065373   -3.71  0.00021
+## ns(date, 19 * df)39  0.130924   0.059874    2.19  0.02877
+## ns(date, 19 * df)40 -0.195709   0.061350   -3.19  0.00142
+## ns(date, 19 * df)41 -0.181094   0.064454   -2.81  0.00496
+## ns(date, 19 * df)42 -0.275602   0.069632   -3.96  7.6e-05
+## ns(date, 19 * df)43 -0.222815   0.065189   -3.42  0.00063
+## ns(date, 19 * df)44 -0.003452   0.060774   -0.06  0.95471
+## ns(date, 19 * df)45 -0.279661   0.061781   -4.53  6.0e-06
+## ns(date, 19 * df)46 -0.135883   0.063308   -2.15  0.03184
+## ns(date, 19 * df)47 -0.368471   0.063444   -5.81  6.3e-09
+## ns(date, 19 * df)48 -0.207586   0.062868   -3.30  0.00096
+## ns(date, 19 * df)49  0.000189   0.060400    0.00  0.99751
+## ns(date, 19 * df)50 -0.299292   0.063247   -4.73  2.2e-06
+## ns(date, 19 * df)51 -0.233257   0.066169   -3.53  0.00042
+## ns(date, 19 * df)52 -0.466132   0.071451   -6.52  6.9e-11
+## ns(date, 19 * df)53 -0.273817   0.065355   -4.19  2.8e-05
+## ns(date, 19 * df)54 -0.143657   0.061989   -2.32  0.02048
+## ns(date, 19 * df)55 -0.211822   0.063409   -3.34  0.00084
+## ns(date, 19 * df)56 -0.419863   0.067341   -6.23  4.5e-10
+## ns(date, 19 * df)57 -0.357929   0.071863   -4.98  6.3e-07
+## ns(date, 19 * df)58 -0.406725   0.066912   -6.08  1.2e-09
+## ns(date, 19 * df)59  0.093446   0.060663    1.54  0.12346
+## ns(date, 19 * df)60 -0.290277   0.062958   -4.61  4.0e-06
+## ns(date, 19 * df)61 -0.351035   0.067251   -5.22  1.8e-07
+## ns(date, 19 * df)62 -0.396583   0.072258   -5.49  4.1e-08
+## ns(date, 19 * df)63 -0.432524   0.067541   -6.40  1.5e-10
+## ns(date, 19 * df)64  0.013487   0.061611    0.22  0.82672
+## ns(date, 19 * df)65 -0.281047   0.063338   -4.44  9.1e-06
+## ns(date, 19 * df)66 -0.322595   0.066787   -4.83  1.4e-06
+## ns(date, 19 * df)67 -0.394819   0.071779   -5.50  3.8e-08
+## ns(date, 19 * df)68 -0.319496   0.067253   -4.75  2.0e-06
+## ns(date, 19 * df)69 -0.101894   0.062887   -1.62  0.10517
+## ns(date, 19 * df)70 -0.397170   0.064134   -6.19  5.9e-10
+## ns(date, 19 * df)71 -0.210689   0.067405   -3.13  0.00177
+## ns(date, 19 * df)72 -0.497948   0.071832   -6.93  4.1e-12
+## ns(date, 19 * df)73 -0.312568   0.067266   -4.65  3.4e-06
+## ns(date, 19 * df)74 -0.192018   0.062960   -3.05  0.00229
+## ns(date, 19 * df)75 -0.216567   0.064130   -3.38  0.00073
+## ns(date, 19 * df)76 -0.421882   0.067357   -6.26  3.8e-10
+## ns(date, 19 * df)77 -0.488674   0.073508   -6.65  3.0e-11
+## ns(date, 19 * df)78 -0.276300   0.066396   -4.16  3.2e-05
+## ns(date, 19 * df)79 -0.161703   0.062947   -2.57  0.01020
+## ns(date, 19 * df)80 -0.349080   0.064299   -5.43  5.7e-08
+## ns(date, 19 * df)81 -0.403827   0.068023   -5.94  2.9e-09
+## ns(date, 19 * df)82 -0.403626   0.073749   -5.47  4.4e-08
+## ns(date, 19 * df)83 -0.371557   0.067434   -5.51  3.6e-08
+## ns(date, 19 * df)84 -0.132312   0.063605   -2.08  0.03750
+## ns(date, 19 * df)85 -0.381199   0.065354   -5.83  5.4e-09
+## ns(date, 19 * df)86 -0.415265   0.068998   -6.02  1.8e-09
+## ns(date, 19 * df)87 -0.482824   0.073381   -6.58  4.7e-11
+## ns(date, 19 * df)88 -0.387909   0.070737   -5.48  4.2e-08
+## ns(date, 19 * df)89 -0.152684   0.075111   -2.03  0.04207
+## ns(date, 19 * df)90 -0.183488   0.114617   -1.60  0.10940
+## ns(date, 19 * df)91 -0.956219   0.435297   -2.20  0.02804
+## ns(date, 19 * df)92 43.442409  29.768256    1.46  0.14447
+## ns(date, 19 * df)93  0.346365   0.286957    1.21  0.22742
+## ns(date, 19 * df)94        NA         NA      NA       NA
+## ns(date, 19 * df)95        NA         NA      NA       NA
+## ns(tmpd, 6)1        -0.017789   0.053605   -0.33  0.74000
+## ns(tmpd, 6)2        -0.028780   0.059947   -0.48  0.63116
+## ns(tmpd, 6)3         0.047275   0.057883    0.82  0.41408
+## ns(tmpd, 6)4         0.043043   0.045327    0.95  0.34231
+## ns(tmpd, 6)5         0.088156   0.112951    0.78  0.43511
+## ns(tmpd, 6)6         0.192703   0.050456    3.82  0.00013
+## ns(rmtmpd, 6)1      -0.084392   0.056005   -1.51  0.13185
+## ns(rmtmpd, 6)2      -0.071647   0.060930   -1.18  0.23963
+## ns(rmtmpd, 6)3      -0.043437   0.059861   -0.73  0.46807
+## ns(rmtmpd, 6)4      -0.107348   0.049996   -2.15  0.03178
+## ns(rmtmpd, 6)5       0.021962   0.110028    0.20  0.84179
+## ns(rmtmpd, 6)6       0.183190   0.059040    3.10  0.00192
+## ns(dptp, 3)1         0.023501   0.022687    1.04  0.30025
+## ns(dptp, 3)2        -0.022449   0.063684   -0.35  0.72446
+## ns(dptp, 3)3         0.016517   0.025382    0.65  0.51522
+## ns(rmdptp, 3)1      -0.047993   0.031044   -1.55  0.12212
+## ns(rmdptp, 3)2      -0.070639   0.079507   -0.89  0.37429
+## ns(rmdptp, 3)3      -0.134960   0.032597   -4.14  3.5e-05
+## Lag(pm10tmean, 1)    0.000696   0.000237    2.94  0.00333
+## 
+## (Dispersion parameter for poisson family taken to be 1)
+## 
+##     Null deviance: 4402.6  on 1123  degrees of freedom
+## Residual deviance: 1303.5  on 1005  degrees of freedom
+##   (5816 observations deleted due to missingness)
+## AIC: 9460
+## 
+## Number of Fisher Scoring iterations: 4</code></pre>
