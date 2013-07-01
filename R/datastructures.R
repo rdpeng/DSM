@@ -11,10 +11,6 @@ setOldClass("data.frame")
 setClass("exposureModel",
          representation(model = "lm",
                         exposure = "character"))
-setClass("APTSModel",
-         representation(timevar = "character",
-                        summary = "APTSSummary",
-                        "exposureModel"))
 setClass("sensitivityResults",
          representation(models = "list",
                         orig = "exposureModel"))
@@ -31,7 +27,14 @@ setClass("APTSSummary",
          representation(miss = "numeric", skew = "list", disp = "numeric",
                         highlev = "character", outlier = "character",
                         data = "APTSData"))
+setClass("APTSModel",
+         representation(timevar = "character",
+                        summary = "APTSSummary",
+                        "exposureModel"))
 
+setClass("optimalTimeDF",
+         representation(dfmin = "numeric", aic = "numeric",
+                        dfseq = "numeric", method = "character"))
 
 ################################################################################
 ## Generic Functions
@@ -50,6 +53,7 @@ setGeneric("influential", function(object, ...) standardGeneric("influential"))
 setGeneric("selectTimeDF", function(object, ...) standardGeneric("selectTimeDF"))
 setGeneric("influenceAnalysis", function(object, ...) standardGeneric("influenceAnalysis"))
 
+setGeneric("nyears", function(object, ...) standardGeneric("nyears"))
 
 ################################################################################
 ## Methods
@@ -57,6 +61,19 @@ setGeneric("influenceAnalysis", function(object, ...) standardGeneric("influence
 
 ################################################################################
 ## Utilities
+
+setAs("optimalTimeDF", "numeric", function(from) {
+        from@dfmin
+})
+
+setMethod("plot", "optimalTimeDF", function(x, y, pch = 19, ...) {
+        plot(x@dfseq, x@aic, xlab = "Degrees of freedom per year",
+             ylab = "AIC", pch = pch, ...)
+})
+
+setMethod("show", "optimalTimeDF", function(object) {
+        show(object@dfmin)
+})
 
 setMethod("getNames", "exposureModel",
           function(x, ...) {
@@ -105,17 +122,24 @@ readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
             timevar = timevar, d0)
 }
 
+setMethod("nyears", "Date", function(object, ...) {
+        diff(range(as.POSIXlt(object)$year)) + 1
+})
+
+setMethod("nyears", "APTSModel", function(object, ...) {
+        timevar <- object@timevar
+        dat <- as(object@summary@data, "data.frame")
+        nyears(dat[, timevar])
+})
+
 ################################################################################
 ## EDA
 
 library(moments)
 
-nyears <- function(datevar) {
-        diff(range(as.POSIXlt(datevar)$year)) + 1
-}
-
 ## Check for missing data in exposure, missing overall, skewness in
-## predictors, overdispersion in outcome, outliers
+## predictors, overdispersion in outcome, outliers; Generate a
+## report/summary
 setMethod("checkData", "APTSData", function(object, ...) {
         nms <- names(object)
         ## Missing data
@@ -202,7 +226,7 @@ selectTimeDF <- function(object, dfseq = 2:16, ...) {
         aic <- sapply(results, function(x) try(AIC(x), silent = TRUE))
         names(aic) <- dfseq
         dfmin <- dfseq[which.min(aic)]
-        ## Return updated APTSModel
+        new("optimalTimeDF", dfmin = dfmin, aic = aic, dfseq = dfseq)
 }
 
 ################################################################################
@@ -302,29 +326,6 @@ setMethod("show", "exposureModel",
 ################################################################################
 ## Sensitivity Analysis
 
-adjustTimeDF <- function(object, dfseq) {
-        dfseq <- as.integer(dfseq)
-        nms <- getNames(object)
-        timevar <- object@timevar
-        pos <- grep(timevar, nms$other)
-        origTimeVar <- nms$other[pos]
-        timeVec <- paste("ns(", timevar, ", ", dfseq, ")", sep = "")
-        results <- vector("list", length = length(dfseq))
-
-        for(i in seq(along = dfseq)) {
-                newFormula <- reformulate(c(nms$exposure, nms$other[-pos],
-                                            timeVec[i]),
-                                          response = nms$response)
-                out <- update(object@model, formula = newFormula)
-                expm <- new("exposureModel", model = out,
-                            exposure = object@exposure)
-                results[[i]] <- expm
-        }
-        names(results) <- as.character(dfseq)
-        new("adjustTimeDF", models = results, dfseq = dfseq,
-            timeVec = timeVec, orig = object)
-}
-
 setMethod("influenceAnalysis", "APTSModel", function(object, ...) {
         ## Influential observations
         fit <- object@model
@@ -347,8 +348,28 @@ setMethod("influenceAnalysis", "APTSModel", function(object, ...) {
         new("sensitivityResults", models = results, orig = object)
 })
 
-setMethod("sensitivityAnalysis", "APTSModel", function(object, ...) {
-        adj <- adjustTimeDF(object, ...)
+setMethod("sensitivityAnalysis", "APTSModel", function(object, dfseq, ...) {
+        dfseq <- as.integer(dfseq)
+        dfseq.total <- dfseq * nyears(object)
+        nms <- getNames(object)
+        timevar <- object@timevar
+        pos <- grep(timevar, nms$other)
+        origTimeVar <- nms$other[pos]
+        timeVec <- paste("ns(", timevar, ", ", dfseq.total, ")", sep = "")
+        results <- vector("list", length = length(dfseq.total))
+
+        for(i in seq(along = dfseq.total)) {
+                newFormula <- reformulate(c(nms$exposure, nms$other[-pos],
+                                            timeVec[i]),
+                                          response = nms$response)
+                out <- update(object@model, formula = newFormula)
+                expm <- new("exposureModel", model = out,
+                            exposure = object@exposure)
+                results[[i]] <- expm
+        }
+        names(results) <- as.character(dfseq)
+        new("adjustTimeDF", models = results, dfseq = dfseq,
+            timeVec = timeVec, orig = object)
 })
 
 setMethod("describe", "sensitivityResults", function(object, ...) {
