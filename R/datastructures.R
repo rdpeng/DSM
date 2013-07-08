@@ -115,16 +115,36 @@ char2comma <- function(x) {
                        sQuote(x[n]))
 }
 
+fextension <- function(name) {
+        p <- regexec("\\.([a-zA-Z0-9]+)$", name)
+        m <- regmatches(name, p)[[1]]
+        m[2]
+}
+
 ## For now read an RDS file
 readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
                          timevar = NULL) {
-        ## d0 <- read.csv(file, ...)
-        d0 <- readRDS(file, ...)
+        ext <- tolower(fextension(file))
+        if(ext == "csv")
+                d0 <- read.csv(file, ...)
+        else if(ext == "xlsx") {
+                message("reading data from first sheet of spreadsheet")
+                d0 <- read.excel(file, sheetIndex = 1,
+                                 stringsAsFactors = FALSE, ...)
+        }
+        else if(ext == "rds")
+                d0 <- readRDS(file, ...)
+        else
+                stop("cannot recognize file type for dataset")
         nms <- names(d0)
-        if(is.null(response))
+        if(is.null(response)) {
+                message("using first column as response variable")
                 response <- nms[1]
-        if(is.null(exposure))
+        }
+        if(is.null(exposure)) {
+                message("using second column as exposure variable")
                 exposure <- nms[2]
+        }
         if(is.null(timevar)) {
                 i <- grep(c("date|time"), tolower(nms), perl = TRUE)
                 if(length(i) > 0) {
