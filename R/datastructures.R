@@ -13,7 +13,7 @@ read.excel <- function(file, ...) {
         d0 <- read.xlsx(file, ...)
         for(i in seq_len(ncol(d0))) {
                 cl <- class(d0[[i]])
-                if(cl == "factor") {
+                if(cl == "factor" || cl == "character") {
                         v <- as.character(d0[[i]])
                         d0[[i]] <- type.convert(v)
                 }
