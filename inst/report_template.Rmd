@@ -4,12 +4,9 @@
 
 Loading required packages. 
 ```{r}
-if(!require(tsModel)) {
-        install.packages("tsModel")
-}
-if(!require(moments)) {
-        install.packages("moments")
-}
+library(tsModel)
+library(moments)
+library(xlsx)
 library(splines)
 library(methods)
 source("../R/datastructures.R")
