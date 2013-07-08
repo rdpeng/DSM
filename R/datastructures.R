@@ -3,6 +3,25 @@
 ################################################################################
 
 ################################################################################
+## Random utilities
+
+library(xlsx)
+
+## Read an Excel file with some help
+
+read.excel <- function(file, ...) {
+        d0 <- read.xlsx(file, ...)
+        for(i in seq_len(ncol(d0))) {
+                cl <- class(d0[[i]])
+                if(cl == "factor") {
+                        v <- as.character(d0[[i]])
+                        d0[[i]] <- type.convert(v)
+                }
+        }
+        d0
+}
+
+################################################################################
 ## Data Classes
 
 setOldClass("lm")
