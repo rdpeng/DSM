@@ -26,6 +26,22 @@ ch <- checkData(d0)
 print(ch)
 ```
 
+Making a histogram of the response
+```{r}
+yname <- d0@response
+hist(d0[, d0@response], main = "Response", xlab = yname)
+```
+
+Making a histogram of the exposure
+```{r}
+xname <- d0@exposure
+hist(d0[, d0@exposure], main = "Exposure", xlab = xname)
+```
+
+Bivariate plot of response and exposure
+```{r}
+plot(d0[, xname], d0[, yname], xlab = xname, ylab = yname, pch = 20)
+```
 
 ## Model Building
 

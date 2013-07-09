@@ -6,6 +6,9 @@
 <pre class="sourceCode r"><code class="sourceCode r"><span class="kw">library</span>(splines)
 <span class="kw">library</span>(DSM)</code></pre>
 <pre><code>## Loading required package: methods</code></pre>
+<pre><code>## Loading required package: xlsx</code></pre>
+<pre><code>## Loading required package: xlsxjars</code></pre>
+<pre><code>## Loading required package: rJava</code></pre>
 <h2 id="read-in-data">Read in Data</h2>
 <p>Read in the raw data.</p>
 <pre class="sourceCode r"><code class="sourceCode r">d0 &lt;- <span class="kw">readAPTSData</span>(<span class="st">&quot;ny.rds&quot;</span>)</code></pre>
@@ -18,9 +21,26 @@
 <span class="kw">print</span>(ch)</code></pre>
 <pre><code>## * missing: 0.00% of response, 83.80% of exposure
 ## * complete: 16.18% of observations were complete cases
-## * right-skew: NA
+## * right-skew: pm10tmean
 ## * high leverage (row #): 3510, 5667
 ## * outlier (row #): 593, 2383, 2384, 2385, 4571</code></pre>
+<p>Making a histogram of the response</p>
+<pre class="sourceCode r"><code class="sourceCode r">yname &lt;- d0@response
+<span class="kw">hist</span>(d0[, d0@response], <span class="dt">main =</span> yname)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-4.png" alt="plot of chunk unnamed-chunk-4" /><p class="caption">plot of chunk unnamed-chunk-4</p>
+</div>
+<p>Making a histogram of the exposure</p>
+<pre class="sourceCode r"><code class="sourceCode r">xname &lt;- d0@exposure
+<span class="kw">hist</span>(d0[, d0@exposure], <span class="dt">main =</span> xname)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-5.png" alt="plot of chunk unnamed-chunk-5" /><p class="caption">plot of chunk unnamed-chunk-5</p>
+</div>
+<p>Bivariate plot of response and exposure</p>
+<pre class="sourceCode r"><code class="sourceCode r"><span class="kw">plot</span>(d0[, xname], d0[, yname], <span class="dt">xlab =</span> xname, <span class="dt">ylab =</span> yname, <span class="dt">pch =</span> <span class="dv">20</span>)</code></pre>
+<div class="figure">
+<img src="figure/unnamed-chunk-6.png" alt="plot of chunk unnamed-chunk-6" /><p class="caption">plot of chunk unnamed-chunk-6</p>
+</div>
 <h2 id="model-building">Model Building</h2>
 <p>Fitting the base model.</p>
 <pre class="sourceCode r"><code class="sourceCode r">base &lt;- <span class="kw">glm</span>(death ~ dow + <span class="kw">ns</span>(date, <span class="dv">19</span> * <span class="dv">6</span>) + <span class="kw">ns</span>(tmpd, <span class="dv">6</span>) + <span class="kw">ns</span>(rmtmpd, <span class="dv">6</span>) + <span class="kw">ns</span>(dptp, 
@@ -35,7 +55,7 @@ dfmin &lt;- <span class="kw">selectTimeDF</span>(ap)</code></pre>
 <p>Check AIC values for selecting the degrees of freedom per year.</p>
 <pre class="sourceCode r"><code class="sourceCode r"><span class="kw">plot</span>(dfmin)</code></pre>
 <div class="figure">
-<img src="figure/unnamed-chunk-7.png" alt="plot of chunk unnamed-chunk-7" /><p class="caption">plot of chunk unnamed-chunk-7</p>
+<img src="figure/unnamed-chunk-10.png" alt="plot of chunk unnamed-chunk-10" /><p class="caption">plot of chunk unnamed-chunk-10</p>
 </div>
 <h2 id="model-fitting">Model Fitting</h2>
 <p>Fitting the final model.</p>
@@ -65,13 +85,13 @@ ap &lt;- <span class="kw">new</span>(<span class="st">&quot;APTSModel&quot;</spa
 ##   0.9999, 1.001) to 1.001 (95% CI: 1, 1.001)</code></pre>
 <pre class="sourceCode r"><code class="sourceCode r"><span class="kw">plot</span>(sens)</code></pre>
 <div class="figure">
-<img src="figure/unnamed-chunk-10.png" alt="plot of chunk unnamed-chunk-10" /><p class="caption">plot of chunk unnamed-chunk-10</p>
+<img src="figure/unnamed-chunk-13.png" alt="plot of chunk unnamed-chunk-13" /><p class="caption">plot of chunk unnamed-chunk-13</p>
 </div>
 <p>Check sensitivity of results to outliers or influential data points.</p>
 <pre class="sourceCode r"><code class="sourceCode r">infl &lt;- <span class="kw">influenceAnalysis</span>(ap)
 <span class="kw">plot</span>(infl)</code></pre>
 <div class="figure">
-<img src="figure/unnamed-chunk-11.png" alt="plot of chunk unnamed-chunk-11" /><p class="caption">plot of chunk unnamed-chunk-11</p>
+<img src="figure/unnamed-chunk-14.png" alt="plot of chunk unnamed-chunk-14" /><p class="caption">plot of chunk unnamed-chunk-14</p>
 </div>
 <h2 id="appendix">Appendix</h2>
 <p>Summary of final fitted model.</p>
