@@ -2,7 +2,7 @@
 \alias{read.excel}
 %- Also NEED an '\alias' for EACH other topic documented here.
 \title{
-%%  ~~function to do ... ~~
+	Reading table data from Microsoft Excel
 }
 \description{
 %%  ~~ A concise (1-5 lines) description of what the function does. ~~

@@ -5,7 +5,7 @@
 ################################################################################
 ## Random utilities
 
-library(xlsx)
+## library(xlsx)
 
 ## Read an Excel file with some help
 
@@ -174,7 +174,7 @@ setMethod("nyears", "APTSModel", function(object, ...) {
 ################################################################################
 ## EDA
 
-library(moments)
+## library(moments)
 
 ## Check for missing data in exposure, missing overall, skewness in
 ## predictors, overdispersion in outcome, outliers; Generate a
