@@ -246,9 +246,7 @@ setMethod("show", "APTSSummary", function(object) {
 ################################################################################
 ## Model Building
 
-setMethod("selectTimeDF", "APTSModel", selectTimeDF)
-
-selectTimeDF <- function(object, dfseq = 2:16, ...) {
+selectTimeDF.method <- function(object, dfseq = 2:16, ...) {
         nms <- getNames(object)
         mod <- object@model
         pos <- grep(object@timevar, nms$other)
@@ -267,6 +265,8 @@ selectTimeDF <- function(object, dfseq = 2:16, ...) {
         dfmin <- dfseq[which.min(aic)]
         new("optimalTimeDF", dfmin = dfmin, aic = aic, dfseq = dfseq)
 }
+
+setMethod("selectTimeDF", "APTSModel", selectTimeDF.method)
 
 ################################################################################
 ## Model Reporting
