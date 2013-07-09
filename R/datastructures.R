@@ -11,6 +11,11 @@
 
 read.excel <- function(file, ...) {
         d0 <- read.xlsx(file, ...)
+        ## Check first column for row numbers
+        if(names(d0)[1] == "NA.")
+                d0 <- d0[, -1]
+        if(ncol(d0) == 0L)
+                stop("no columns in data frame")
         for(i in seq_len(ncol(d0))) {
                 cl <- class(d0[[i]])
                 if(cl == "factor" || cl == "character") {
