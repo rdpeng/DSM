@@ -5,11 +5,8 @@
 Loading required packages. 
 ```{r}
 library(tsModel)
-library(moments)
-library(xlsx)
 library(splines)
-library(methods)
-source("../R/datastructures.R")
+library(DSM)
 ```
 
 ## Read in Data
@@ -62,8 +59,8 @@ plot(dfmin)
 
 Fitting the final model.
 ```{r}
-df <- as(dfmin, "numeric")
-final <- glm(death ~ dow + ns(date, 19 * df) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 1), data = as(d0, "data.frame"), family = poisson)
+df.use <- as(dfmin, "numeric")
+final <- glm(death ~ dow + ns(date, 19 * df.use) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 1), data = as(d0, "data.frame"), family = poisson)
 ap <- new("APTSModel", timevar = "date", model = final, exposure = "pm10tmean", summary = ch)
 ```
 
