@@ -1,7 +1,7 @@
 Package: DSM
 Title: Deterministic Statistical Machine
-Depends: R (>= 3.0.0), methods
-Imports: stats
+Depends: R (>= 3.0.0), methods, xlsx
+Imports: stats, moments
 Date: 2013-06-24
 Version: 0.1
 Author: Roger D. Peng <rpeng@jhsph.edu>
