@@ -3,29 +3,6 @@
 ################################################################################
 
 ################################################################################
-## Random utilities
-
-## library(xlsx)
-
-## Read an Excel file with some help
-
-read.excel <- function(file, ...) {
-        d0 <- read.xlsx(file, ...)
-        ## Check first column for row numbers
-        if(names(d0)[1] == "NA.")
-                d0 <- d0[, -1]
-        if(ncol(d0) == 0L)
-                stop("no columns in data frame")
-        for(i in seq_len(ncol(d0))) {
-                cl <- class(d0[[i]])
-                if(cl == "factor" || cl == "character") {
-                        v <- as.character(d0[[i]])
-                        d0[[i]] <- type.convert(v)
-                }
-        }
-        d0
-}
-
 ################################################################################
 ## Data Classes
 
@@ -114,6 +91,27 @@ fextension <- function(name) {
         m[2]
 }
 
+## library(xlsx)
+
+## Read an Excel file with some help
+
+read.excel <- function(file, ...) {
+        d0 <- read.xlsx(file, ...)
+        ## Check first column for row numbers
+        if(names(d0)[1] == "NA.")
+                d0 <- d0[, -1]
+        if(ncol(d0) == 0L)
+                stop("no columns in data frame")
+        for(i in seq_len(ncol(d0))) {
+                cl <- class(d0[[i]])
+                if(cl == "factor" || cl == "character") {
+                        v <- as.character(d0[[i]])
+                        d0[[i]] <- type.convert(v)
+                }
+        }
+        d0
+}
+
 ## For now read an RDS file
 readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
                          timevar = NULL) {
@@ -149,6 +147,7 @@ readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
                 else
                         stop("need to specify 'timevar'")
         }
+        d0[, timevar] <- as.Date(d0[, timevar])
         stopifnot(response %in% nms)
         stopifnot(exposure %in% nms)
         stopifnot(timevar %in% nms)
