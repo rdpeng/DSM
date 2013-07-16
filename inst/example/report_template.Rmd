@@ -6,9 +6,12 @@ begin.time <- Sys.time()
 
 ## Specify Inputs
 
-```{r specify input parameters, child="input_parameters.Rmd"}
+```{r specify input parameters, child="input_parameters.Rmd", echo=TRUE}
 ```
 
+```{r set global options, echo=FALSE}
+opts_chunk$set(echo = FALSE)
+```
 
 ## Initialization
 
@@ -32,23 +35,32 @@ Read in the raw data from the file `r sQuote(datafile)`.
 d0 <- readAPTSData(datafile, response = response, exposure = exposure, timevar = timevar)
 ```
 
-Computing hashes for data file and initial data frame.
 ```{r hashing data file and data frame}
+## Computing SHA-1 hashes for data file and initial data frame
 hashfile <- digest(datafile, "sha1", file = TRUE)
 hashdframe <- digest(d0, "sha1")
 ```
 
+```{r summarize input data frame, echo=FALSE}
+if(ncol(d0) < 20) {
+        outputdesc <- paste("The variables in the data frame are named:", paste(sQuote(names(d0)), collapse = ", "))
+} else {
+        outputdesc <- paste("The first 20 variables in the data frame are named:", paste(sQuote(names(d0)[1:20]), collapse = ", "))
+}
+```
+
 ## Exploratory Data Analysis
 
-We conducted some exploratory analysis of the data. 
+The input data frame had `r nrow(d0)` rows and `r ncol(d0)` columns. `r outputdesc`. The response variable was `r sQuote(d0@response)` and the exposure variable was `r sQuote(d0@exposure)`. 
+
 
 ```{r exploratory data analysis}
 nms <- names(d0)
 
 ## Check missing data
-miss.exp <- mean(is.na(d0[, d0@exposure]))
-miss.response <- mean(is.na(d0[, d0@response]))
-comp <- mean(complete.cases(d0))
+miss.exp <- mean(is.na(d0[, d0@exposure])) * 100
+miss.response <- mean(is.na(d0[, d0@response])) * 100
+comp <- mean(complete.cases(d0)) * 100
 miss <- c(response = miss.response, exposure = miss.exp,
           complete = comp)
 
@@ -58,62 +70,65 @@ skewvar <- lapply(use, function(vname) {
         try(agostino.test(d0[, vname], alt = "less"), silent = TRUE)
 })
 u <- !sapply(skewvar, inherits, what = "try-error")
-names(skewvar) <- use
-
-## Overdispersion
-disp <- var(d0[, d0@response]) / mean(d0[, d0@response])
-
-## High leverage predictors (continuous)
-use <- setdiff(nms, d0@response)
-tempform <- reformulate(use)
-mm <- model.matrix(tempform, as(d0, "data.frame"))
-lev <- diag(mm %*% tcrossprod(solve(crossprod(mm)), mm))
-highlev <- names(which(lev >= (mean(lev) * 4)))
-
-## Response outliers [abs(std residual) > 6]
-dummyform <- reformulate(sprintf("ns(%s, %d)", d0@timevar,
-                                 nyears(d0[, d0@timevar]) * 4L),
-                         d0@response)
-dummy <- glm(dummyform, data = as(d0, "data.frame"),
-             family = poisson, na.action = na.exclude)
-res <- rstandard(dummy)
-out <- names(which(res > 6))
-
-eda.summ <- list(miss = miss, skew = skewvar, disp = disp,
-                 highlev = highlev, outlier = out)
+skewvar <- skewvar[u]
+names(skewvar) <- use[u]
+pv <- sapply(skewvar, "[[", "p.value")
+pvadj <- pv[!is.na(pv)]
+eda.summ <- list(miss = miss, skew = names(which(pvadj < 0.05)))
 ```
 
+We conducted an exploratory analysis of the data. The median of `r sQuote(d0@response)` was `r median(d0[, d0@response], na.rm = TRUE)` with an inter-quartile range of `r IQR(d0[, d0@response], na.rm = TRUE)`. The median for the exposure `r sQuote(d0@exposure)` was `r median(d0[, d0@exposure], na.rm = TRUE)` with an inter-quartile range of `r IQR(d0[, d0@exposure], na.rm = TRUE)`.
 
-Making a histogram of the response
+For the response variable, `r if(miss.response == 0) { "none of the observations were missing" } else if(miss.response < 1) { "less than 1% of the observations were missing" } else { sprintf("%.1f of the observations were missing", miss.response) }`. For the exposure variable, `r if(miss.exp == 0) { "none of the observations were missing" } else if(miss.exp < 1) { "less than 1% of the observations were missing" } else { sprintf("%.1f%% of the observations were missing", miss.exp) }`.
+
+`r if(length(eda.summ$skew) > 0L) { sprintf("Tests for skewness identified possible right skewness in the following variables: %s", sQuote(paste(eda.summ$skew, collapse = ", "))) }`.
+
+Below is a histogram of the response variable `r sQuote(d0@response)`.
+
 ```{r response histogram}
 yname <- d0@response
 hist(d0[, yname], main = "Response", xlab = yname)
 ```
 
-Making a histogram of the exposure
+Below is a histogram of the exposure variable, `r sQuote(d0@exposure)`.
+
 ```{r exposure histogram}
 xname <- d0@exposure
 hist(d0[, xname], main = "Exposure", xlab = xname)
 ```
 
-Bivariate plot of response and exposure
+Below is a bivariate plot of response versus the exposure.
+
 ```{r response exposure scatterplot}
 plot(d0[, xname], d0[, yname], xlab = xname, ylab = yname, pch = 20)
 ```
 
 ## Model Building
 
-Fitting the base model with 6 degrees of freedom per year in the dataset.
+Fitting the base model to the dataset with 
+
+* The exposure variable `r sQuote(d0@exposure)` at lag `r exposure.lag`.
+
+* 6 degrees of freedom per year for the smooth function of time.
+
+* 6 degrees of freedom for a smooth function of same-day temperature
+
+* 6 degrees of freedom for a smooth function of the running mean of temperature at lags 1 through 3
+
+* 3 degrees of freedom for a smooth function of same-day dew point temperature
+
+* 3 degrees of freedom for a smooth function of the running mean of dew point temperature at lags 1 through 3
+
+* a categorical variable indicating the day of the week.
+
+For all of the spline smoothers we use natural cubic splines for the basis functions.
 
 ```{r base model}
 nyr <- nyears(d0[, d0@timevar])  ## Compute number of years in the dataset
-base <- glm(death ~ dow + ns(date, nyr * 6) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 1), data = as(d0, "data.frame"), family = poisson)
+base <- glm(death ~ dow + ns(date, nyr * 6) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson)
 ```
 
-Selecting the optimal degrees of freedom for the smooth function of
-time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). The range of degrees of
-freedom per year that we search over is between 2 and 20 per year. For
-the spline smoother we use natural cubic splines.
+A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). The range of degrees of freedom per year that we search over is between 2 and 20 per year. 
 
 ```{r selecting df per year, cache=TRUE}
 dfseq <- 2:20
@@ -137,7 +152,7 @@ dfmin <- dfseq[which.min(aic)]
 Optimal number of degrees of freedom _per year_ for the smooth
 function of time is `r dfmin`.
 
-Check AIC values for selecting the degrees of freedom per year.
+Below is a plot showing the AIC values versus the number of degrees of freedom per year in the smooth function of time.
 
 ```{r, plotting AIC values}
 plot(dfseq, aic, xlab = "Degrees of freedom per year", ylab = "AIC", pch = 20)
@@ -145,24 +160,12 @@ plot(dfseq, aic, xlab = "Degrees of freedom per year", ylab = "AIC", pch = 20)
 
 ## Model Fitting
 
-Fitting the final model.
-```{r fitting final model}
+With the selected degrees of freedom per year, we fit the final model.
+```{r fitting final model,echo=FALSE}
 nyr <- nyears(d0[, d0@timevar])
-final <- glm(death ~ dow + ns(date, nyr * dfmin) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 1), data = as(d0, "data.frame"), family = poisson)
-```
-
-```{r add possible influential points based on final model}
-n <- summary(final)$df.null + 1
-lev <- hatvalues(final)
-cdist <- cooks.distance(final) * n
-ulev <- lev > mean(lev) * 4
-if(any(ulev)) {
-        eda.summ$highlev <- unique(c(eda.summ$highlev, names(which(ulev))))
-}
-ucd <- cdist > qchisq(0.99, 1) & rank(cdist) > (n - 10)
-if(any(ucd)) {
-        eda.summ$outlier <- unique(c(eda.summ$outlier, names(which(ucd))))
-}
+finalexpr <- substitute(glm(death ~ dow + ns(date, nyr * dfmin) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, dfmin = as.numeric(dfmin), exposure.lag = exposure.lag))
+final <- eval(finalexpr)
+print(final$call)
 ```
 
 ## Results
@@ -205,8 +208,7 @@ b <- sapply(results, function(x) coef(x)[exposureTerm])
 ci <- sapply(results, function(x) confint.default(x, exposureTerm))
 xpts <- seq_along(results)
 ypts <- b
-plot(xpts, ypts, ylim = range(ci), xlab = "Models (df/year)", ylab = "Coefficient", pch = 19, 
-     xaxt = "n", main = "Sensitivity Analysis")
+plot(xpts, ypts, ylim = range(ci), xlab = "Models (df/year)", ylab = "Coefficient", pch = 19, xaxt = "n", main = "Sensitivity Analysis")
 segments(xpts, ci[1, ], xpts, ci[2, ])
 abline(h = coef(final)[exposureTerm], lty = 2)
 abline(h = 0, lty = 3, col = "red")
@@ -215,36 +217,52 @@ legend("topright", legend = "Final Estimate", lty = 2,
 axis(1, xpts, names(results))
 ```
 
-Check sensitivity of results to outliers or influential data points.
+After fitting the final model, we examine the leverages and Cook's distance to identify potentially influential points that may affect the estimation of the exposure regression coefficient.
+
+```{r find possible influential points based on final model}
+n <- summary(final)$df.null + 1
+lev <- hatvalues(final)
+cdist <- cooks.distance(final) * n
+ulev <- lev > mean(lev) * 4
+eda.summ$highlev <- names(which(ulev))
+ucd <- cdist > qchisq(0.99, 1) & rank(cdist) > (n - 10)
+eda.summ$outlier <- names(which(ucd))
+infl <- with(eda.summ, unique(c(highlev, outlier)))
+```
+
+In this dataset we identified `r length(infl)` potentially influential points, given the final fitted model. `r if(length(infl) > 0L) { "Below we plot the exposure regression coefficient after removing each influential point individually and after removing all of them simultaneously (the x-axis shows the observation row labels from the original data frame)" }`.
 
 ```{r influential points analysis,cache=TRUE}
-infl <- with(eda.summ, unique(c(highlev, outlier)))
-dat <- as(d0, "data.frame")
-modellist <- lapply(infl, function(id) {
-        i <- match(id, row.names(dat))
-        newdat <- dat[-i, ]
-        m <- update(final, data = newdat)
-})
-i <- match(infl, row.names(dat))
-rm.all <- update(final, data = dat[-i, ])
-results <- append(modellist, list(rm.all))
-names(results) <- c(infl, "all")
+if(length(infl) > 0L) {
+        dat <- as(d0, "data.frame")
+        modellist <- lapply(infl, function(id) {
+                i <- match(id, row.names(dat))
+                newdat <- dat[-i, ]
+                m <- update(final, data = newdat)
+                })
+        i <- match(infl, row.names(dat))
+        rm.all <- update(final, data = dat[-i, ])
+        results <- append(modellist, list(rm.all))
+        names(results) <- c(infl, "all")
+}
 ```
 
 ```{r plot influental points anlaysis, fig.width=12}
-## Plot results
-exposureTerm <- grep(d0@exposure, fnames, value = TRUE)
-b <- sapply(results, function(x) coef(x)[exposureTerm])
-ci <- sapply(results, function(x) confint.default(x, exposureTerm))
-xpts <- seq_along(results)
-ypts <- b
-plot(xpts, ypts, ylim = range(ci), xlab = "Influential Points", ylab = "Coefficient", pch = 19, xaxt = "n", main = "Influential Points Analysis")
-segments(xpts, ci[1, ], xpts, ci[2, ])
-abline(h = coef(final)[exposureTerm], lty = 2)
-abline(h = 0, lty = 3, col = "red")
-legend("topright", legend = "Final Estimate", lty = 2,
-       bty = "n")
-axis(1, xpts, names(results))
+if(length(infl) > 0L) {
+        ## Plot results
+        exposureTerm <- grep(d0@exposure, fnames, value = TRUE)
+        b <- sapply(results, function(x) coef(x)[exposureTerm])
+        ci <- sapply(results, function(x) confint.default(x, exposureTerm))
+        xpts <- seq_along(results)
+        ypts <- b
+        plot(xpts, ypts, ylim = range(ci), xlab = "Influential Points", ylab = "Coefficient", pch = 19, xaxt = "n", main = "Influential Points Analysis")
+        segments(xpts, ci[1, ], xpts, ci[2, ])
+        abline(h = coef(final)[exposureTerm], lty = 2)
+        abline(h = 0, lty = 3, col = "red")
+        legend("topright", legend = "Final Estimate", lty = 2,
+               bty = "n")
+        axis(1, xpts, names(results))
+}
 ```
 
 

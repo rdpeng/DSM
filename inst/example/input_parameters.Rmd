@@ -1,6 +1,7 @@
 ```{r input parameters}
-datafile <- "ny.rds"
-exposure <- NULL
+datafile <- "ny.csv"
+exposure <- "pm10tmean"
 response <- "death"
-timevar <- NULL
+timevar <- "date"
+exposure.lag <- 1
 ```
