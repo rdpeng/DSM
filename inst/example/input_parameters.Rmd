@@ -1,0 +1,6 @@
+```{r input parameters}
+datafile <- "ny.rds"
+exposure <- NULL
+response <- "death"
+timevar <- NULL
+```
