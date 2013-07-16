@@ -47,18 +47,6 @@ setClass("APTSData",
                         exposure = "character",
                         timevar = "character",
                         "data.frame"))
-setClass("APTSSummary",
-         representation(miss = "numeric", skew = "list", disp = "numeric",
-                        highlev = "character", outlier = "character",
-                        data = "APTSData"))
-setClass("APTSModel",
-         representation(timevar = "character",
-                        summary = "APTSSummary",
-                        "exposureModel"))
-
-setClass("optimalTimeDF",
-         representation(dfmin = "numeric", aic = "numeric",
-                        dfseq = "numeric", method = "character"))
 
 ################################################################################
 ## Generic Functions
@@ -143,19 +131,21 @@ readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
                 stop("cannot recognize file type for dataset")
         nms <- names(d0)
         if(is.null(response)) {
-                message("using first column as response variable")
+                message(sprintf("using first column as response variable ('%s')", nms[1]))
                 response <- nms[1]
         }
         if(is.null(exposure)) {
-                message("using second column as exposure variable")
+                message(sprintf("using second column as exposure variable ('%s')", nms[2]))
                 exposure <- nms[2]
         }
         if(is.null(timevar)) {
-                i <- grep(c("date|time"), tolower(nms), perl = TRUE)
-                if(length(i) > 0) {
+                i <- grep("date|time", tolower(nms), perl = TRUE)
+                if(length(i) == 1L) {
                         timevar <- nms[i]
                         message(sprintf("using '%s' for 'timevar'", timevar))
                 }
+                else if(length(i) > 1)
+                        stop("multiple time variables possible; need to specify 'timevar'")
                 else
                         stop("need to specify 'timevar'")
         }
@@ -170,11 +160,25 @@ setMethod("nyears", "Date", function(object, ...) {
         diff(range(as.POSIXlt(object)$year)) + 1
 })
 
+setMethod("nyears", "APTSData", function(object, ...) {
+        nyears(object[, object@timevar])
+})
+
 setMethod("nyears", "APTSModel", function(object, ...) {
         timevar <- object@timevar
         dat <- as(object@summary@data, "data.frame")
         nyears(dat[, timevar])
 })
+
+################################################################################
+## Check for valid data
+
+checkInputData <- function(x) {
+        if(!is.data.frame(x))
+                stop("input data is not 'data.frame'")
+}
+
+
 
 ################################################################################
 ## EDA
@@ -251,7 +255,7 @@ setMethod("show", "APTSSummary", function(object) {
 ################################################################################
 ## Model Building
 
-selectTimeDF.method <- function(object, dfseq = 2:16, ...) {
+selectTimeDF.method <- function(object, dfseq = 2:20, ...) {
         nms <- getNames(object)
         mod <- object@model
         pos <- grep(object@timevar, nms$other)
