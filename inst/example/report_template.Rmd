@@ -4,7 +4,7 @@
 begin.time <- Sys.time()
 ```
 
-## Specify Inputs
+## Inputs
 
 ```{r specify input parameters, child="input_parameters.Rmd", echo=TRUE}
 ```
@@ -16,7 +16,7 @@ opts_chunk$set(echo = FALSE)
 ## Initialization
 
 Loading required packages. 
-```{r loading packages, warning=FALSE, message=FALSE}
+```{r loading packages, echo=TRUE, warning=FALSE, message=FALSE}
 library(tsModel)
 library(moments)
 library(xlsx)
@@ -27,7 +27,7 @@ library(digest)
 
 ## Read in Data
 
-Read in the raw data from the file `r sQuote(datafile)`.
+We read in the raw data from the file `r sQuote(datafile)`.
 
 ```{r reading data file}
 ## This function reads in .rds, .csv, or .xlsx data; returns an object
@@ -105,7 +105,7 @@ plot(d0[, xname], d0[, yname], xlab = xname, ylab = yname, pch = 20)
 
 ## Model Building
 
-Fitting the base model to the dataset with 
+We fit a base model to the dataset with 
 
 * The exposure variable `r sQuote(d0@exposure)` at lag `r exposure.lag`.
 
@@ -123,12 +123,14 @@ Fitting the base model to the dataset with
 
 For all of the spline smoothers we use natural cubic splines for the basis functions.
 
-```{r base model}
+```{r base model,echo=FALSE}
 nyr <- nyears(d0[, d0@timevar])  ## Compute number of years in the dataset
-base <- glm(death ~ dow + ns(date, nyr * 6) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson)
+basecall <- substitute(glm(death ~ dow + ns(date, nyr * 6) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, exposure.lag = exposure.lag))
+base <- eval(basecall)
+print(base$call)
 ```
 
-A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). The range of degrees of freedom per year that we search over is between 2 and 20 per year. 
+A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). Essentially, we choose the degrees of freedom per year that optimally predicts the variation in the exposure variable (`r sQuote(d0@exposure)`). The fit of the model to the data is measured via AIC and the range of degrees of freedom per year that we search over is between 2 and 20 per year. 
 
 ```{r selecting df per year, cache=TRUE}
 dfseq <- 2:20
@@ -149,8 +151,8 @@ names(aic) <- dfseq
 dfmin <- dfseq[which.min(aic)]
 ```
 
-Optimal number of degrees of freedom _per year_ for the smooth
-function of time is `r dfmin`.
+The optimal number of degrees of freedom per year for the smooth
+function of time is estimated to be `r dfmin`.
 
 Below is a plot showing the AIC values versus the number of degrees of freedom per year in the smooth function of time.
 
@@ -160,24 +162,27 @@ plot(dfseq, aic, xlab = "Degrees of freedom per year", ylab = "AIC", pch = 20)
 
 ## Model Fitting
 
-With the selected degrees of freedom per year, we fit the final model.
+With the selected degrees of freedom per year, we fit the final model to the data.
+
 ```{r fitting final model,echo=FALSE}
 nyr <- nyears(d0[, d0@timevar])
-finalexpr <- substitute(glm(death ~ dow + ns(date, nyr * dfmin) + ns(tmpd, 6) + ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, dfmin = as.numeric(dfmin), exposure.lag = exposure.lag))
+finalexpr <- substitute(glm(death ~ dow + ns(date, nyr * dfmin) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, dfmin = as.numeric(dfmin), exposure.lag = exposure.lag))
 final <- eval(finalexpr)
 print(final$call)
 ```
 
 ## Results
 ```{r}
-varname <- "Lag(pm10tmean, 1)"
+varname <- grep(d0@exposure, attr(terms(formula(final)), "term.labels"), value = TRUE)
 summ.final <- summary(final)
 cf <- summ.final$coefficients[varname, 1]
 pval <- summ.final$coefficients[varname, 4]
-ci <- confint.default(final)
+ci <- confint.default(final, varname)
+p.incr <- 100 * (exp(10 * cf) - 1)
+p.ci <- 100 * (exp(10 * ci) - 1)
 ```
 
-Final results for a 10 unit change in exposure.
+We found that a 10 unit increase in the exposure `r sQuote(d0@exposure)` was associated with a `r sprintf("%s (95%% CI: %s, %s)", prettyNum(p.incr), prettyNum(p.ci[1]), prettyNum(p.ci[2]))` percent increase in the response `r sQuote(d0@response)`. This result was `r if(pval >= 0.05) { "not" }` statistically significant at the level 0.05 (p = `r prettyNum(pval)`).
 
 ## Sensitivity Analysis
 
@@ -202,7 +207,7 @@ for(i in seq(along = dfseq.total)) {
 names(results) <- as.character(dfseq)
 ```
 
-```{r plot sensitivity analysis, fig.width=12}
+```{r plot sensitivity analysis, fig.width=10}
 exposureTerm <- grep(d0@exposure, fnames, value = TRUE)
 b <- sapply(results, function(x) coef(x)[exposureTerm])
 ci <- sapply(results, function(x) confint.default(x, exposureTerm))
@@ -247,7 +252,7 @@ if(length(infl) > 0L) {
 }
 ```
 
-```{r plot influental points anlaysis, fig.width=12}
+```{r plot influental points anlaysis, fig.width=10}
 if(length(infl) > 0L) {
         ## Plot results
         exposureTerm <- grep(d0@exposure, fnames, value = TRUE)
@@ -265,14 +270,24 @@ if(length(infl) > 0L) {
 }
 ```
 
+## Outputs
+
+```{r final output objects, echo=FALSE}
+out.objects = c("final", "response", "exposure", "exposure.lag", "timevar")
+outputfile <- sprintf("%s-output.rda", datafile)
+save(list = out.objects, file = outputfile, compress = "xz")
+dg <- digest(outputfile, "sha1", file = TRUE)
+```
+
+The final output is stored in the file **`r outputfile`** which contains the objects: `r sQuote(out.objects)`.
+
+The SHA-1 hash for the output file is: `r dg`.
 
 ## Appendix
 
 ### Summary of the final fitted model.
 
 ```{r final model summary}
-print(nyr)
-print(dfmin)
 summary(final)
 ```
 

@@ -180,7 +180,7 @@ hljs.initHighlightingOnLoad();
 <body>
 <h1>Time Series Analysis of Air Pollution and Health Data</h1>
 
-<h2>Specify Inputs</h2>
+<h2>Inputs</h2>
 
 <pre><code class="r">datafile &lt;- &quot;ny.csv&quot;
 exposure &lt;- &quot;pm10tmean&quot;
@@ -193,13 +193,21 @@ exposure.lag &lt;- 1
 
 <p>Loading required packages. </p>
 
+<pre><code class="r">library(tsModel)
+library(moments)
+library(xlsx)
+library(splines)
+library(DSM)
+library(digest)
+</code></pre>
+
 <h2>Read in Data</h2>
 
-<p>Read in the raw data from the file &#39;ny.csv&#39;.</p>
+<p>We read in the raw data from the file &#39;ny.csv&#39;.</p>
 
 <h2>Exploratory Data Analysis</h2>
 
-<p>The input data frame had 6940 rows and 9 columns. The variables in the data frame are named: &#39;X&#39;, &#39;death&#39;, &#39;pm10tmean&#39;, &#39;date&#39;, &#39;tmpd&#39;, &#39;rmtmpd&#39;, &#39;dptp&#39;, &#39;rmdptp&#39;, &#39;dow&#39;. The response variable was &#39;death&#39; and the exposure variable was &#39;pm10tmean&#39;. </p>
+<p>The input data frame had 6940 rows and 6 columns. The variables in the data frame are named: &#39;death&#39;, &#39;pm10tmean&#39;, &#39;date&#39;, &#39;tmpd&#39;, &#39;dptp&#39;, &#39;dow&#39;. The response variable was &#39;death&#39; and the exposure variable was &#39;pm10tmean&#39;. </p>
 
 <pre><code>## Warning: argument is not numeric or logical: returning NA
 </code></pre>
@@ -233,7 +241,7 @@ exposure.lag &lt;- 1
 
 <h2>Model Building</h2>
 
-<p>Fitting the base model to the dataset with </p>
+<p>We fit a base model to the dataset with </p>
 
 <ul>
 <li><p>The exposure variable &#39;pm10tmean&#39; at lag 1.</p></li>
@@ -247,10 +255,16 @@ exposure.lag &lt;- 1
 
 <p>For all of the spline smoothers we use natural cubic splines for the basis functions.</p>
 
-<p>A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). The range of degrees of freedom per year that we search over is between 2 and 20 per year. </p>
+<pre><code>## glm(formula = death ~ dow + ns(date, 19 * 6) + ns(tmpd, 6) + 
+##     ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 
+##     1:3), 3) + Lag(pm10tmean, 1), family = poisson, data = as(d0, 
+##     &quot;data.frame&quot;))
+</code></pre>
 
-<p>Optimal number of degrees of freedom <em>per year</em> for the smooth
-function of time is 5.</p>
+<p>A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). Essentially, we choose the degrees of freedom per year that optimally predicts the variation in the exposure variable (&#39;pm10tmean&#39;). The fit of the model to the data is measured via AIC and the range of degrees of freedom per year that we search over is between 2 and 20 per year. </p>
+
+<p>The optimal number of degrees of freedom per year for the smooth
+function of time is estimated to be 5.</p>
 
 <p>Below is a plot showing the AIC values versus the number of degrees of freedom per year in the smooth function of time.</p>
 
@@ -258,16 +272,17 @@ function of time is 5.</p>
 
 <h2>Model Fitting</h2>
 
-<p>With the selected degrees of freedom per year, we fit the final model.</p>
+<p>With the selected degrees of freedom per year, we fit the final model to the data.</p>
 
 <pre><code>## glm(formula = death ~ dow + ns(date, 19 * 5) + ns(tmpd, 6) + 
-##     ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 
-##     1), family = poisson, data = as(d0, &quot;data.frame&quot;))
+##     ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 
+##     1:3), 3) + Lag(pm10tmean, 1), family = poisson, data = as(d0, 
+##     &quot;data.frame&quot;))
 </code></pre>
 
 <h2>Results</h2>
 
-<p>Final results for a 10 unit change in exposure.</p>
+<p>We found that a 10 unit increase in the exposure &#39;pm10tmean&#39; was associated with a 0.698 (95% CI: 0.2314, 1.167) percent increase in the response &#39;death&#39;. This result was  statistically significant at the level 0.05 (p = 0.003329).</p>
 
 <h2>Sensitivity Analysis</h2>
 
@@ -282,149 +297,150 @@ the smooth function of time.</p>
 
 <p><img src="figure/plot%20influental%20points%20anlaysis.png" alt="plot of chunk plot influental points anlaysis"/> </p>
 
+<h2>Outputs</h2>
+
+<p>The final output is stored in the file <strong>ny.csv-output.rda</strong> which contains the objects: &#39;final&#39;, &#39;response&#39;, &#39;exposure&#39;, &#39;exposure.lag&#39;, &#39;timevar&#39;.</p>
+
+<p>The SHA-1 hash for the output file is: 6d268e106a3dce3bc78733393f5be6ef3ecc0659.</p>
+
 <h2>Appendix</h2>
 
 <h3>Summary of the final fitted model.</h3>
 
-<pre><code>## [1] 19
-</code></pre>
-
-<pre><code>## [1] 5
-</code></pre>
-
 <pre><code>## 
 ## Call:
 ## glm(formula = death ~ dow + ns(date, 19 * 5) + ns(tmpd, 6) + 
-##     ns(rmtmpd, 6) + ns(dptp, 3) + ns(rmdptp, 3) + Lag(pm10tmean, 
-##     1), family = poisson, data = as(d0, &quot;data.frame&quot;))
+##     ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 
+##     1:3), 3) + Lag(pm10tmean, 1), family = poisson, data = as(d0, 
+##     &quot;data.frame&quot;))
 ## 
 ## Deviance Residuals: 
 ##    Min      1Q  Median      3Q     Max  
 ## -3.461  -0.683  -0.039   0.669   4.416  
 ## 
 ## Coefficients: (2 not defined because of singularities)
-##                     Estimate Std. Error z value Pr(&gt;|z|)
-## (Intercept)         5.503965   0.059088   93.15  &lt; 2e-16
-## dowMonday           0.015388   0.008357    1.84  0.06556
-## dowSaturday        -0.010907   0.008315   -1.31  0.18962
-## dowSunday          -0.015101   0.008305   -1.82  0.06902
-## dowThursday        -0.008487   0.008264   -1.03  0.30440
-## dowTuesday          0.004280   0.008312    0.51  0.60665
-## dowWednesday       -0.009176   0.008224   -1.12  0.26457
-## ns(date, 19 * 5)1  -0.066276   0.053632   -1.24  0.21655
-## ns(date, 19 * 5)2  -0.270448   0.071948   -3.76  0.00017
-## ns(date, 19 * 5)3   0.090100   0.060524    1.49  0.13657
-## ns(date, 19 * 5)4  -0.154098   0.060425   -2.55  0.01077
-## ns(date, 19 * 5)5   0.214739   0.058726    3.66  0.00026
-## ns(date, 19 * 5)6  -0.298046   0.063531   -4.69  2.7e-06
-## ns(date, 19 * 5)7  -0.093790   0.067956   -1.38  0.16754
-## ns(date, 19 * 5)8  -0.144898   0.063229   -2.29  0.02193
-## ns(date, 19 * 5)9   0.081213   0.059486    1.37  0.17218
-## ns(date, 19 * 5)10 -0.062613   0.059720   -1.05  0.29443
-## ns(date, 19 * 5)11 -0.167607   0.063785   -2.63  0.00860
-## ns(date, 19 * 5)12 -0.168059   0.067445   -2.49  0.01271
-## ns(date, 19 * 5)13 -0.171616   0.062916   -2.73  0.00638
-## ns(date, 19 * 5)14  0.160479   0.058870    2.73  0.00641
-## ns(date, 19 * 5)15 -0.179847   0.060710   -2.96  0.00305
-## ns(date, 19 * 5)16 -0.109682   0.063254   -1.73  0.08292
-## ns(date, 19 * 5)17 -0.249679   0.069367   -3.60  0.00032
-## ns(date, 19 * 5)18 -0.174785   0.062511   -2.80  0.00517
-## ns(date, 19 * 5)19  0.052691   0.059834    0.88  0.37852
-## ns(date, 19 * 5)20 -0.193851   0.061207   -3.17  0.00154
-## ns(date, 19 * 5)21 -0.108019   0.064443   -1.68  0.09370
-## ns(date, 19 * 5)22 -0.365146   0.068978   -5.29  1.2e-07
-## ns(date, 19 * 5)23 -0.104491   0.063546   -1.64  0.10011
-## ns(date, 19 * 5)24  0.025115   0.059381    0.42  0.67234
-## ns(date, 19 * 5)25 -0.107982   0.060522   -1.78  0.07440
-## ns(date, 19 * 5)26 -0.239815   0.064134   -3.74  0.00018
-## ns(date, 19 * 5)27 -0.168838   0.068636   -2.46  0.01390
-## ns(date, 19 * 5)28 -0.236672   0.062807   -3.77  0.00016
-## ns(date, 19 * 5)29  0.038618   0.059470    0.65  0.51610
-## ns(date, 19 * 5)30  0.100602   0.058960    1.71  0.08796
-## ns(date, 19 * 5)31 -0.238430   0.065104   -3.66  0.00025
-## ns(date, 19 * 5)32 -0.274936   0.070327   -3.91  9.3e-05
-## ns(date, 19 * 5)33 -0.103588   0.065289   -1.59  0.11260
-## ns(date, 19 * 5)34 -0.057028   0.061250   -0.93  0.35182
-## ns(date, 19 * 5)35 -0.170622   0.060982   -2.80  0.00514
-## ns(date, 19 * 5)36 -0.188537   0.065899   -2.86  0.00422
-## ns(date, 19 * 5)37 -0.233396   0.067838   -3.44  0.00058
-## ns(date, 19 * 5)38 -0.242459   0.065373   -3.71  0.00021
-## ns(date, 19 * 5)39  0.130924   0.059874    2.19  0.02877
-## ns(date, 19 * 5)40 -0.195709   0.061350   -3.19  0.00142
-## ns(date, 19 * 5)41 -0.181094   0.064454   -2.81  0.00496
-## ns(date, 19 * 5)42 -0.275602   0.069632   -3.96  7.6e-05
-## ns(date, 19 * 5)43 -0.222815   0.065189   -3.42  0.00063
-## ns(date, 19 * 5)44 -0.003452   0.060774   -0.06  0.95471
-## ns(date, 19 * 5)45 -0.279661   0.061781   -4.53  6.0e-06
-## ns(date, 19 * 5)46 -0.135883   0.063308   -2.15  0.03184
-## ns(date, 19 * 5)47 -0.368471   0.063444   -5.81  6.3e-09
-## ns(date, 19 * 5)48 -0.207586   0.062868   -3.30  0.00096
-## ns(date, 19 * 5)49  0.000189   0.060400    0.00  0.99751
-## ns(date, 19 * 5)50 -0.299292   0.063247   -4.73  2.2e-06
-## ns(date, 19 * 5)51 -0.233257   0.066169   -3.53  0.00042
-## ns(date, 19 * 5)52 -0.466132   0.071451   -6.52  6.9e-11
-## ns(date, 19 * 5)53 -0.273817   0.065355   -4.19  2.8e-05
-## ns(date, 19 * 5)54 -0.143657   0.061989   -2.32  0.02048
-## ns(date, 19 * 5)55 -0.211822   0.063409   -3.34  0.00084
-## ns(date, 19 * 5)56 -0.419863   0.067341   -6.23  4.5e-10
-## ns(date, 19 * 5)57 -0.357929   0.071863   -4.98  6.3e-07
-## ns(date, 19 * 5)58 -0.406725   0.066912   -6.08  1.2e-09
-## ns(date, 19 * 5)59  0.093446   0.060663    1.54  0.12346
-## ns(date, 19 * 5)60 -0.290277   0.062958   -4.61  4.0e-06
-## ns(date, 19 * 5)61 -0.351035   0.067251   -5.22  1.8e-07
-## ns(date, 19 * 5)62 -0.396583   0.072258   -5.49  4.1e-08
-## ns(date, 19 * 5)63 -0.432524   0.067541   -6.40  1.5e-10
-## ns(date, 19 * 5)64  0.013487   0.061611    0.22  0.82672
-## ns(date, 19 * 5)65 -0.281047   0.063338   -4.44  9.1e-06
-## ns(date, 19 * 5)66 -0.322595   0.066787   -4.83  1.4e-06
-## ns(date, 19 * 5)67 -0.394819   0.071779   -5.50  3.8e-08
-## ns(date, 19 * 5)68 -0.319496   0.067253   -4.75  2.0e-06
-## ns(date, 19 * 5)69 -0.101894   0.062887   -1.62  0.10517
-## ns(date, 19 * 5)70 -0.397170   0.064134   -6.19  5.9e-10
-## ns(date, 19 * 5)71 -0.210689   0.067405   -3.13  0.00177
-## ns(date, 19 * 5)72 -0.497948   0.071832   -6.93  4.1e-12
-## ns(date, 19 * 5)73 -0.312568   0.067266   -4.65  3.4e-06
-## ns(date, 19 * 5)74 -0.192018   0.062960   -3.05  0.00229
-## ns(date, 19 * 5)75 -0.216567   0.064130   -3.38  0.00073
-## ns(date, 19 * 5)76 -0.421882   0.067357   -6.26  3.8e-10
-## ns(date, 19 * 5)77 -0.488674   0.073508   -6.65  3.0e-11
-## ns(date, 19 * 5)78 -0.276300   0.066396   -4.16  3.2e-05
-## ns(date, 19 * 5)79 -0.161703   0.062947   -2.57  0.01020
-## ns(date, 19 * 5)80 -0.349080   0.064299   -5.43  5.7e-08
-## ns(date, 19 * 5)81 -0.403827   0.068023   -5.94  2.9e-09
-## ns(date, 19 * 5)82 -0.403626   0.073749   -5.47  4.4e-08
-## ns(date, 19 * 5)83 -0.371557   0.067434   -5.51  3.6e-08
-## ns(date, 19 * 5)84 -0.132312   0.063605   -2.08  0.03750
-## ns(date, 19 * 5)85 -0.381199   0.065354   -5.83  5.4e-09
-## ns(date, 19 * 5)86 -0.415265   0.068998   -6.02  1.8e-09
-## ns(date, 19 * 5)87 -0.482824   0.073381   -6.58  4.7e-11
-## ns(date, 19 * 5)88 -0.387909   0.070737   -5.48  4.2e-08
-## ns(date, 19 * 5)89 -0.152684   0.075111   -2.03  0.04207
-## ns(date, 19 * 5)90 -0.183488   0.114617   -1.60  0.10940
-## ns(date, 19 * 5)91 -0.956219   0.435297   -2.20  0.02804
-## ns(date, 19 * 5)92 43.442409  29.768256    1.46  0.14447
-## ns(date, 19 * 5)93  0.346365   0.286957    1.21  0.22742
-## ns(date, 19 * 5)94        NA         NA      NA       NA
-## ns(date, 19 * 5)95        NA         NA      NA       NA
-## ns(tmpd, 6)1       -0.017789   0.053605   -0.33  0.74000
-## ns(tmpd, 6)2       -0.028780   0.059947   -0.48  0.63116
-## ns(tmpd, 6)3        0.047275   0.057883    0.82  0.41408
-## ns(tmpd, 6)4        0.043043   0.045327    0.95  0.34231
-## ns(tmpd, 6)5        0.088156   0.112951    0.78  0.43511
-## ns(tmpd, 6)6        0.192703   0.050456    3.82  0.00013
-## ns(rmtmpd, 6)1     -0.084392   0.056005   -1.51  0.13185
-## ns(rmtmpd, 6)2     -0.071647   0.060930   -1.18  0.23963
-## ns(rmtmpd, 6)3     -0.043437   0.059861   -0.73  0.46807
-## ns(rmtmpd, 6)4     -0.107348   0.049996   -2.15  0.03178
-## ns(rmtmpd, 6)5      0.021962   0.110028    0.20  0.84179
-## ns(rmtmpd, 6)6      0.183190   0.059040    3.10  0.00192
-## ns(dptp, 3)1        0.023501   0.022687    1.04  0.30025
-## ns(dptp, 3)2       -0.022449   0.063684   -0.35  0.72446
-## ns(dptp, 3)3        0.016517   0.025382    0.65  0.51522
-## ns(rmdptp, 3)1     -0.047993   0.031044   -1.55  0.12212
-## ns(rmdptp, 3)2     -0.070639   0.079507   -0.89  0.37429
-## ns(rmdptp, 3)3     -0.134960   0.032597   -4.14  3.5e-05
-## Lag(pm10tmean, 1)   0.000696   0.000237    2.94  0.00333
+##                             Estimate Std. Error z value Pr(&gt;|z|)
+## (Intercept)                 5.503965   0.059088   93.15  &lt; 2e-16
+## dowMonday                   0.015388   0.008357    1.84  0.06556
+## dowSaturday                -0.010907   0.008315   -1.31  0.18962
+## dowSunday                  -0.015101   0.008305   -1.82  0.06902
+## dowThursday                -0.008487   0.008264   -1.03  0.30440
+## dowTuesday                  0.004280   0.008312    0.51  0.60665
+## dowWednesday               -0.009176   0.008224   -1.12  0.26457
+## ns(date, 19 * 5)1          -0.066276   0.053632   -1.24  0.21655
+## ns(date, 19 * 5)2          -0.270448   0.071948   -3.76  0.00017
+## ns(date, 19 * 5)3           0.090100   0.060524    1.49  0.13657
+## ns(date, 19 * 5)4          -0.154098   0.060425   -2.55  0.01077
+## ns(date, 19 * 5)5           0.214739   0.058726    3.66  0.00026
+## ns(date, 19 * 5)6          -0.298046   0.063531   -4.69  2.7e-06
+## ns(date, 19 * 5)7          -0.093790   0.067956   -1.38  0.16754
+## ns(date, 19 * 5)8          -0.144898   0.063229   -2.29  0.02193
+## ns(date, 19 * 5)9           0.081213   0.059486    1.37  0.17218
+## ns(date, 19 * 5)10         -0.062613   0.059720   -1.05  0.29443
+## ns(date, 19 * 5)11         -0.167607   0.063785   -2.63  0.00860
+## ns(date, 19 * 5)12         -0.168059   0.067445   -2.49  0.01271
+## ns(date, 19 * 5)13         -0.171616   0.062916   -2.73  0.00638
+## ns(date, 19 * 5)14          0.160479   0.058870    2.73  0.00641
+## ns(date, 19 * 5)15         -0.179847   0.060710   -2.96  0.00305
+## ns(date, 19 * 5)16         -0.109682   0.063254   -1.73  0.08292
+## ns(date, 19 * 5)17         -0.249679   0.069367   -3.60  0.00032
+## ns(date, 19 * 5)18         -0.174785   0.062511   -2.80  0.00517
+## ns(date, 19 * 5)19          0.052691   0.059834    0.88  0.37852
+## ns(date, 19 * 5)20         -0.193851   0.061207   -3.17  0.00154
+## ns(date, 19 * 5)21         -0.108019   0.064443   -1.68  0.09370
+## ns(date, 19 * 5)22         -0.365146   0.068978   -5.29  1.2e-07
+## ns(date, 19 * 5)23         -0.104491   0.063546   -1.64  0.10011
+## ns(date, 19 * 5)24          0.025115   0.059381    0.42  0.67234
+## ns(date, 19 * 5)25         -0.107982   0.060522   -1.78  0.07440
+## ns(date, 19 * 5)26         -0.239815   0.064134   -3.74  0.00018
+## ns(date, 19 * 5)27         -0.168838   0.068636   -2.46  0.01390
+## ns(date, 19 * 5)28         -0.236672   0.062807   -3.77  0.00016
+## ns(date, 19 * 5)29          0.038618   0.059470    0.65  0.51610
+## ns(date, 19 * 5)30          0.100602   0.058960    1.71  0.08796
+## ns(date, 19 * 5)31         -0.238430   0.065104   -3.66  0.00025
+## ns(date, 19 * 5)32         -0.274936   0.070327   -3.91  9.3e-05
+## ns(date, 19 * 5)33         -0.103588   0.065289   -1.59  0.11260
+## ns(date, 19 * 5)34         -0.057028   0.061250   -0.93  0.35182
+## ns(date, 19 * 5)35         -0.170622   0.060982   -2.80  0.00514
+## ns(date, 19 * 5)36         -0.188537   0.065899   -2.86  0.00422
+## ns(date, 19 * 5)37         -0.233396   0.067838   -3.44  0.00058
+## ns(date, 19 * 5)38         -0.242459   0.065373   -3.71  0.00021
+## ns(date, 19 * 5)39          0.130924   0.059874    2.19  0.02877
+## ns(date, 19 * 5)40         -0.195709   0.061350   -3.19  0.00142
+## ns(date, 19 * 5)41         -0.181094   0.064454   -2.81  0.00496
+## ns(date, 19 * 5)42         -0.275602   0.069632   -3.96  7.6e-05
+## ns(date, 19 * 5)43         -0.222815   0.065189   -3.42  0.00063
+## ns(date, 19 * 5)44         -0.003452   0.060774   -0.06  0.95471
+## ns(date, 19 * 5)45         -0.279661   0.061781   -4.53  6.0e-06
+## ns(date, 19 * 5)46         -0.135883   0.063308   -2.15  0.03184
+## ns(date, 19 * 5)47         -0.368471   0.063444   -5.81  6.3e-09
+## ns(date, 19 * 5)48         -0.207586   0.062868   -3.30  0.00096
+## ns(date, 19 * 5)49          0.000189   0.060400    0.00  0.99751
+## ns(date, 19 * 5)50         -0.299292   0.063247   -4.73  2.2e-06
+## ns(date, 19 * 5)51         -0.233257   0.066169   -3.53  0.00042
+## ns(date, 19 * 5)52         -0.466132   0.071451   -6.52  6.9e-11
+## ns(date, 19 * 5)53         -0.273817   0.065355   -4.19  2.8e-05
+## ns(date, 19 * 5)54         -0.143657   0.061989   -2.32  0.02048
+## ns(date, 19 * 5)55         -0.211822   0.063409   -3.34  0.00084
+## ns(date, 19 * 5)56         -0.419863   0.067341   -6.23  4.5e-10
+## ns(date, 19 * 5)57         -0.357929   0.071863   -4.98  6.3e-07
+## ns(date, 19 * 5)58         -0.406725   0.066912   -6.08  1.2e-09
+## ns(date, 19 * 5)59          0.093446   0.060663    1.54  0.12346
+## ns(date, 19 * 5)60         -0.290277   0.062958   -4.61  4.0e-06
+## ns(date, 19 * 5)61         -0.351035   0.067251   -5.22  1.8e-07
+## ns(date, 19 * 5)62         -0.396583   0.072258   -5.49  4.1e-08
+## ns(date, 19 * 5)63         -0.432524   0.067541   -6.40  1.5e-10
+## ns(date, 19 * 5)64          0.013487   0.061611    0.22  0.82672
+## ns(date, 19 * 5)65         -0.281047   0.063338   -4.44  9.1e-06
+## ns(date, 19 * 5)66         -0.322595   0.066787   -4.83  1.4e-06
+## ns(date, 19 * 5)67         -0.394819   0.071779   -5.50  3.8e-08
+## ns(date, 19 * 5)68         -0.319496   0.067253   -4.75  2.0e-06
+## ns(date, 19 * 5)69         -0.101894   0.062887   -1.62  0.10517
+## ns(date, 19 * 5)70         -0.397170   0.064134   -6.19  5.9e-10
+## ns(date, 19 * 5)71         -0.210689   0.067405   -3.13  0.00177
+## ns(date, 19 * 5)72         -0.497948   0.071832   -6.93  4.1e-12
+## ns(date, 19 * 5)73         -0.312568   0.067266   -4.65  3.4e-06
+## ns(date, 19 * 5)74         -0.192018   0.062960   -3.05  0.00229
+## ns(date, 19 * 5)75         -0.216567   0.064130   -3.38  0.00073
+## ns(date, 19 * 5)76         -0.421882   0.067357   -6.26  3.8e-10
+## ns(date, 19 * 5)77         -0.488674   0.073508   -6.65  3.0e-11
+## ns(date, 19 * 5)78         -0.276300   0.066396   -4.16  3.2e-05
+## ns(date, 19 * 5)79         -0.161703   0.062947   -2.57  0.01020
+## ns(date, 19 * 5)80         -0.349080   0.064299   -5.43  5.7e-08
+## ns(date, 19 * 5)81         -0.403827   0.068023   -5.94  2.9e-09
+## ns(date, 19 * 5)82         -0.403626   0.073749   -5.47  4.4e-08
+## ns(date, 19 * 5)83         -0.371557   0.067434   -5.51  3.6e-08
+## ns(date, 19 * 5)84         -0.132312   0.063605   -2.08  0.03750
+## ns(date, 19 * 5)85         -0.381199   0.065354   -5.83  5.4e-09
+## ns(date, 19 * 5)86         -0.415265   0.068998   -6.02  1.8e-09
+## ns(date, 19 * 5)87         -0.482824   0.073381   -6.58  4.7e-11
+## ns(date, 19 * 5)88         -0.387909   0.070737   -5.48  4.2e-08
+## ns(date, 19 * 5)89         -0.152684   0.075111   -2.03  0.04207
+## ns(date, 19 * 5)90         -0.183488   0.114617   -1.60  0.10940
+## ns(date, 19 * 5)91         -0.956219   0.435297   -2.20  0.02804
+## ns(date, 19 * 5)92         43.442409  29.768256    1.46  0.14447
+## ns(date, 19 * 5)93          0.346365   0.286957    1.21  0.22742
+## ns(date, 19 * 5)94                NA         NA      NA       NA
+## ns(date, 19 * 5)95                NA         NA      NA       NA
+## ns(tmpd, 6)1               -0.017789   0.053605   -0.33  0.74000
+## ns(tmpd, 6)2               -0.028780   0.059947   -0.48  0.63116
+## ns(tmpd, 6)3                0.047275   0.057883    0.82  0.41408
+## ns(tmpd, 6)4                0.043043   0.045327    0.95  0.34231
+## ns(tmpd, 6)5                0.088156   0.112951    0.78  0.43511
+## ns(tmpd, 6)6                0.192703   0.050456    3.82  0.00013
+## ns(runMean(tmpd, 1:3), 6)1 -0.084392   0.056005   -1.51  0.13185
+## ns(runMean(tmpd, 1:3), 6)2 -0.071647   0.060930   -1.18  0.23963
+## ns(runMean(tmpd, 1:3), 6)3 -0.043437   0.059861   -0.73  0.46807
+## ns(runMean(tmpd, 1:3), 6)4 -0.107348   0.049996   -2.15  0.03178
+## ns(runMean(tmpd, 1:3), 6)5  0.021962   0.110028    0.20  0.84179
+## ns(runMean(tmpd, 1:3), 6)6  0.183190   0.059040    3.10  0.00192
+## ns(dptp, 3)1                0.023501   0.022687    1.04  0.30025
+## ns(dptp, 3)2               -0.022449   0.063684   -0.35  0.72446
+## ns(dptp, 3)3                0.016517   0.025382    0.65  0.51522
+## ns(runMean(dptp, 1:3), 3)1 -0.047993   0.031044   -1.55  0.12212
+## ns(runMean(dptp, 1:3), 3)2 -0.070639   0.079507   -0.89  0.37429
+## ns(runMean(dptp, 1:3), 3)3 -0.134960   0.032597   -4.14  3.5e-05
+## Lag(pm10tmean, 1)           0.000696   0.000237    2.94  0.00333
 ## 
 ## (Dispersion parameter for poisson family taken to be 1)
 ## 
@@ -458,14 +474,14 @@ the smooth function of time.</p>
 
 <p>SHA-1 hashes for the input data file and the original data frame.</p>
 
-<pre><code>## &#39;ny.csv&#39;: 09aafbc5243afb18127e5397e8afe99d97d3b03d
+<pre><code>## &#39;ny.csv&#39;: 8a67c16b9a94f5341cdec4d95ec6d55cb9cb8f37
 </code></pre>
 
-<pre><code>## data frame: 603b58e8561b7f9088532f8d275f16583082ffbb
+<pre><code>## data frame: 5f176a7dd366624a963820795acee2c8a8a139ba
 </code></pre>
 
-<p>This analysis started on 2013-07-16 13:41:51 and was completed on
-2013-07-16 13:41:56.</p>
+<p>This analysis started on 2013-07-16 14:49:05 and was completed on
+2013-07-16 14:49:12.</p>
 
 </body>
 
