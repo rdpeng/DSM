@@ -124,8 +124,9 @@ We fit a base model to the dataset with
 For all of the spline smoothers we use natural cubic splines for the basis functions.
 
 ```{r base model,echo=FALSE}
-nyr <- nyears(d0[, d0@timevar])  ## Compute number of years in the dataset
-basecall <- substitute(glm(death ~ dow + ns(date, nyr * 6) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, exposure.lag = exposure.lag))
+ nyr <- nyears(d0[, d0@timevar])  ## Compute number of years in the dataset
+baseform <- buildFormula(d0, response, exposure, timevar, exposure.lag, tempvar, nyr, 6)
+basecall <- substitute(glm(baseform, data = as(d0, "data.frame"), family = poisson), list(baseform = baseform))
 base <- eval(basecall)
 print(base$call)
 ```
@@ -166,8 +167,9 @@ With the selected degrees of freedom per year, we fit the final model to the dat
 
 ```{r fitting final model,echo=FALSE}
 nyr <- nyears(d0[, d0@timevar])
-finalexpr <- substitute(glm(death ~ dow + ns(date, nyr * dfmin) + ns(tmpd, 6) + ns(runMean(tmpd, 1:3), 6) + ns(dptp, 3) + ns(runMean(dptp, 1:3), 3) + Lag(pm10tmean, exposure.lag), data = as(d0, "data.frame"), family = poisson), list(nyr = nyr, dfmin = as.numeric(dfmin), exposure.lag = exposure.lag))
-final <- eval(finalexpr)
+finalexpr <- buildFormula(d0, response, exposure, timevar, exposure.lag, tempvar, nyr, dfmin)
+finalcall <- substitute(glm(finalexpr, data = as(d0, "data.frame"), family = poisson), list(finalexpr = finalexpr))
+final <- eval(finalcall)
 print(final$call)
 ```
 

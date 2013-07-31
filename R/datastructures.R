@@ -147,7 +147,13 @@ readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
                 else
                         stop("need to specify 'timevar'")
         }
-        d0[, timevar] <- as.Date(d0[, timevar])
+        dateconv <- try(as.Date(d0[, timevar]), silent = TRUE)
+        if(!inherits(dateconv, "try-error"))
+                d0[, timevar] <- dateconv
+        else {
+                if(!is.numeric(d0[, timevar]))
+                        stop("'timevar' needs to be 'numeric' or 'date-time'")
+        }
         stopifnot(response %in% nms)
         stopifnot(exposure %in% nms)
         stopifnot(timevar %in% nms)
@@ -157,6 +163,11 @@ readAPTSData <- function(file, ..., response = NULL, exposure = NULL,
 
 setMethod("nyears", "Date", function(object, ...) {
         diff(range(as.POSIXlt(object)$year)) + 1
+})
+
+setMethod("nyears", "numeric", function(object, ...) {
+        x <- as.Date(object, origin = "1960-01-01")
+        nyears(x)
 })
 
 setMethod("nyears", "APTSData", function(object, ...) {
@@ -178,6 +189,16 @@ checkInputData <- function(x) {
 }
 
 
+buildFormula <- function(d0, response, exposure, timevar, exposure.lag,
+                         tempvar, nyr, dfyear) {
+        othervars <- setdiff(names(d0), c(response, exposure, timevar, tempvar))
+        if(length(othervars) > 0L)
+                others <- paste("+", paste(othervars, collapse = "+"), "+")
+        else
+                others <- "+"                
+        charform <- sprintf("%s ~ ns(%s, %d * %d) + ns(%s, 6) + ns(runMean(%s), 6) %s Lag(%s, %s)", response, timevar, dfyear, nyr, tempvar, tempvar, others, exposure, exposure.lag)
+        as.formula(charform)
+}
 
 ################################################################################
 ## EDA
