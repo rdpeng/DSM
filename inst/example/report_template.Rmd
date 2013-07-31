@@ -25,7 +25,7 @@ library(DSM)
 library(digest)
 ```
 
-## Read in Data
+## Read in the Data
 
 We read in the raw data from the file `r sQuote(datafile)`.
 
@@ -43,9 +43,9 @@ hashdframe <- digest(d0, "sha1")
 
 ```{r summarize input data frame, echo=FALSE}
 if(ncol(d0) < 20) {
-        outputdesc <- paste("The variables in the data frame are named:", paste(sQuote(names(d0)), collapse = ", "))
+        outputdesc <- paste("The variables in the data frame are named", paste(sQuote(names(d0)), collapse = ", "))
 } else {
-        outputdesc <- paste("The first 20 variables in the data frame are named:", paste(sQuote(names(d0)[1:20]), collapse = ", "))
+        outputdesc <- paste("The first 20 variables in the data frame are named", paste(sQuote(names(d0)[1:20]), collapse = ", "))
 }
 ```
 
@@ -54,7 +54,7 @@ if(ncol(d0) < 20) {
 The input data frame had `r nrow(d0)` rows and `r ncol(d0)` columns. `r outputdesc`. The response variable was `r sQuote(d0@response)` and the exposure variable was `r sQuote(d0@exposure)`. 
 
 
-```{r exploratory data analysis}
+```{r exploratory data analysis, warning=FALSE}
 nms <- names(d0)
 
 ## Check missing data
@@ -107,7 +107,7 @@ plot(d0[, xname], d0[, yname], xlab = xname, ylab = yname, pch = 20)
 
 We fit a base model to the dataset with 
 
-* The exposure variable `r sQuote(d0@exposure)` at lag `r exposure.lag`.
+* exposure variable `r sQuote(d0@exposure)` at lag `r exposure.lag`.
 
 * 6 degrees of freedom per year for the smooth function of time.
 
@@ -131,7 +131,7 @@ base <- eval(basecall)
 print(base$call)
 ```
 
-A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in Dominici et al. (2004) and Peng et al. (2006). Essentially, we choose the degrees of freedom per year that optimally predicts the variation in the exposure variable (`r sQuote(d0@exposure)`). The fit of the model to the data is measured via AIC and the range of degrees of freedom per year that we search over is between 2 and 20 per year. 
+A key aspect of the model building process involves selecting the optimal degrees of freedom for the smooth function of time to adjust for unmeasured confounding. The approach is based on the methods described in [Dominici et al. (2004)][domi:jasa] and [Peng et al. (2006)][peng:jrssa]. Essentially, we choose the degrees of freedom per year that optimally predicts the variation in the exposure variable (`r sQuote(d0@exposure)`). The fit of the model to the data is measured via AIC and the range of degrees of freedom per year that we search over is between 2 and 20 per year. 
 
 ```{r selecting df per year, cache=TRUE}
 dfseq <- 2:20
@@ -188,8 +188,9 @@ We found that a 10 unit increase in the exposure `r sQuote(d0@exposure)` was ass
 
 ## Sensitivity Analysis
 
-Run sensitivity analysis with respect to the degrees of freedom for
-the smooth function of time.
+We conducted a sensitivity analysis with respect to the degrees of freedom for
+the smooth function of time. Previous work has shown that the estimate of the regression coefficient for `r sQuote(d0@exposure)` can be sensitive to the number of degrees of freedom used in the time smoother, which is used to model unmeasured time-varying potential confounders. Below we plot the estimate of the coefficient for `r sQuote(d0@exposure)` using degrees of freedom varying from `r min(dfseq)` to `r max(dfseq)` per year of data.
+
 
 ```{r sensitivity analysis, cache=TRUE}
 dfseq <- as.integer(dfseq)
@@ -215,7 +216,7 @@ b <- sapply(results, function(x) coef(x)[exposureTerm])
 ci <- sapply(results, function(x) confint.default(x, exposureTerm))
 xpts <- seq_along(results)
 ypts <- b
-plot(xpts, ypts, ylim = range(ci), xlab = "Models (df/year)", ylab = "Coefficient", pch = 19, xaxt = "n", main = "Sensitivity Analysis")
+plot(xpts, ypts, ylim = range(ci), xlab = "Models (df/year)", ylab = "Raw coefficient", pch = 19, xaxt = "n", main = "Sensitivity Analysis")
 segments(xpts, ci[1, ], xpts, ci[2, ])
 abline(h = coef(final)[exposureTerm], lty = 2)
 abline(h = 0, lty = 3, col = "red")
@@ -223,6 +224,19 @@ legend("topright", legend = "Final Estimate", lty = 2,
        bty = "n")
 axis(1, xpts, names(results))
 ```
+
+```{r convert sensitivity analysis}
+bb <- 100 * (exp(b * 10) - 1)
+cci <- 100 * (exp(ci * 10) - 1)
+imin <- which.min(bb)
+imax <- which.max(bb)
+minstr <- sprintf("%s (95%% CI: %s, %s)", prettyNum(bb[imin]), 
+                  prettyNum(cci[1, imin]), prettyNum(cci[2, imin]))
+maxstr <- sprintf("%s (95%% CI: %s, %s)", prettyNum(bb[imax]), 
+                  prettyNum(cci[1, imax]), prettyNum(cci[2, imax]))
+```
+
+In the sensitivity analysis, the estimates ranged from a `r minstr` percent increase in `r sQuote(d0@response)` to a `r maxstr` percent increase in `r sQuote(d0@response)`.
 
 After fitting the final model, we examine the leverages and Cook's distance to identify potentially influential points that may affect the estimation of the exposure regression coefficient.
 
@@ -272,6 +286,21 @@ if(length(infl) > 0L) {
 }
 ```
 
+```{r convert influential points analysis}
+if(length(infl) > 0L) {
+        bb <- 100 * (exp(b * 10) - 1)
+        cci <- 100 * (exp(ci * 10) - 1)
+        imin <- which.min(bb)
+        imax <- which.max(bb)
+        minstr <- sprintf("%s (95%% CI: %s, %s)", prettyNum(bb[imin]), 
+                          prettyNum(cci[1, imin]), prettyNum(cci[2, imin]))
+        maxstr <- sprintf("%s (95%% CI: %s, %s)", prettyNum(bb[imax]), 
+                          prettyNum(cci[1, imax]), prettyNum(cci[2, imax]))
+}
+```
+
+`r if(length(infl) > 0L) { sprintf("In this sensitivity analysis, the estimates ranged from a %s percent increase in %s to a %s percent increase in %s", minstr, sQuote(d0@response), maxstr, sQuote(d0@response)) }`.
+
 ## Outputs
 
 ```{r final output objects, echo=FALSE}
@@ -309,3 +338,8 @@ cat(sprintf("data frame: %s\n", hashdframe))
 
 This analysis started on `r format(begin.time)` and was completed on
 `r format(Sys.time())`.
+
+<!-- References -->
+
+[domi:jasa]: http://www.stanford.edu/~hastie/Papers/dominiciR2.pdf "Improved semiparametric time series models of air pollution and mortality"
+[peng:jrssa]: http://onlinelibrary.wiley.com/doi/10.1111/j.1467-985X.2006.00410.x/abstract "Model choice in time series studies of air pollution and mortality"
