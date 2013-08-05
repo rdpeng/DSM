@@ -1,8 +1,0 @@
-```{r input parameters}
-datafile <- "ny.rds"
-exposure <- "pm10tmean"
-response <- "death"
-timevar <- "date" 
-tempvar <- "tmpd"
-exposure.lag <- 1
-```
