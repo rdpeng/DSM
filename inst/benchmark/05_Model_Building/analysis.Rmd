@@ -1,0 +1,71 @@
+# Benchmark analysis evaluating method for choosing the degrees of
+# freedom for the smooth function of time
+
+```{r load packages}
+library(splines)
+library(tsModel)
+```
+
+This function chooses the degrees of freedom for a given dataset by
+predicting PM10. The output is an integer degrees of freedom per year.
+
+```{r select degrees of freedom}
+getDF <- function(dataset, dfseq = 2:20) {
+        aic <- sapply(dfseq, function(dfuse) {
+                dfy <- dfuse * 8L
+                form <- reformulate(c("ns(tmpd, 6)",
+                                      sprintf("ns(time, %d)", dfy)),
+                                    response = "pm10tmean")
+                model <- lm(form, data = dataset)
+                AIC(model)
+        })
+        dfseq[which.min(aic)]
+}
+```
+
+```{r run analysis, echo=FALSE}
+fitmodel <- function(dataset, dfseq = 2:20) {
+        dfopt <- getDF(dataset, dfseq) * 8L
+        form <- reformulate(c("ns(tmpd, 6)", sprintf("ns(time, %d)", dfopt),
+                              "pm10tmean"), response = "death")
+        model <- glm(form, data = dataset, family = poisson)
+        cf <- summary(model)$coefficients["pm10tmean", 1:2]
+        unname(cf)
+}
+
+## Run simulation analysis
+library(parallel)
+datafiles <- c("simDatasets-fg.rda", "simDatasets-fg10.rda", 
+               "simDatasets-gf.rda", "simDatasets-gf10.rda")
+results <- lapply(datafiles, function(filename) {
+        name <- load(filename)  ## "simDatasets"
+        simdata <- get(name)
+        
+        r <- mclapply(simdata[1:10], function(dataset) {
+                fitmodel(dataset)
+        })
+        m <- do.call("rbind", r)
+        colnames(m) <- c("estimate", "stderr")
+        m
+})
+names(results) <- datafiles
+
+final <- t(sapply(results, function(r) {
+        b <- mean(r[, "estimate"])
+        se <- sqrt(mean(r[, 2]^2))
+        rmse <- sqrt(b^2 + se^2)
+        c(b, se, rmse)
+}))
+colnames(final) <- c("Bias", "SE", "RMSE")
+```
+
+Here are the final summarized results with bias, standard error, and
+root mean squared error.
+
+```{r print out final results}
+print(final)
+```
+
+```{r save out final summary results, echo=FALSE}
+saveRDS(final, file = "output.rds")
+```
