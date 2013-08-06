@@ -41,7 +41,7 @@ results <- lapply(datafiles, function(filename) {
         name <- load(filename)  ## "simDatasets"
         simdata <- get(name)
         
-        r <- mclapply(simdata[1:10], function(dataset) {
+        r <- mclapply(simdata, function(dataset) {
                 fitmodel(dataset)
         })
         m <- do.call("rbind", r)
